@@ -1,0 +1,27 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging / build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+build_out.txt
+*.log
+
+# Environments
+.venv/
+venv/
+env/
+
+# Local config / secrets
+config.local.json
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
