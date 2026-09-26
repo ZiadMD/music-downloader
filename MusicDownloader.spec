@@ -1,13 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
+"""PyInstaller spec for Music Downloader.
+
+Build with:
+    uv sync --extra dev
+    uv run pyinstaller MusicDownloader.spec
+"""
 from PyInstaller.utils.hooks import collect_all
 
-datas = []
+# ttkbootstrap ships its themes/icons as package data and yt_dlp as an
+# importable namespace package, so both need collecting rather than analysis.
+datas = [('icon.ico', '.')]
 binaries = []
-hiddenimports = []
-tmp_ret = collect_all('ttkbootstrap')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('yt_dlp')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+hiddenimports = ['PIL._tkinter_finder']
+
+for package in ('ttkbootstrap', 'yt_dlp', 'musicdl'):
+    collected = collect_all(package)
+    datas += collected[0]
+    binaries += collected[1]
+    hiddenimports += collected[2]
 
 
 a = Analysis(
@@ -19,7 +29,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['numpy', 'pandas', 'IPython', 'tensorflow'],
+    excludes=['numpy', 'pandas', 'IPython', 'tensorflow', 'pytest', 'pyright'],
     noarchive=False,
     optimize=0,
 )
@@ -31,7 +41,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='YouTubePlaylistDownloader',
+    name='MusicDownloader',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

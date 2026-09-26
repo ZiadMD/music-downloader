@@ -1,0 +1,13 @@
+{
+  "last_url": "",
+  "output_dir": "",
+  "format": "MP3",
+  "quality": "192",
+  "media": "Music",
+  "resolution": "Best",
+  "thumbnail": true,
+  "theme": "dark",
+  "cookie_path": "",
+  "parallel": false,
+  "parallel_jobs": 3
+}
