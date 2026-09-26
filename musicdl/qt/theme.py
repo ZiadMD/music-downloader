@@ -59,7 +59,7 @@ def qcolor(role: str, dark: bool) -> QColor:
     """The token role as a ``QColor``.
 
     Every colour in the Qt UI goes through here, which is what keeps the two
-    toolkits on one palette. A literal ``#526678`` written in a widget is
+    toolkits on one palette. A hardcoded hex written in a widget is
     exactly the sort of drift the token system exists to prevent.
     """
     return QColor(tokens.palette(dark)[role])
@@ -130,12 +130,33 @@ QWidget {{
     font-size: {_px(tokens.FONT_SIZE_BODY)};
 }}
 
-/* Inputs and buttons: rounded, with a hairline that only appears on focus.
-   A permanently visible border on every control is the loudest tell of a
-   form that was never designed, so resting state is flat. */
+/* Cards and Bento containers */
+QFrame#card, QWidget#card {{
+    background-color: {p.surface_container};
+    border: 1px solid {p.outline_variant};
+    border-radius: {_px(r_md)};
+}}
+
+QGroupBox {{
+    background-color: {p.surface_container};
+    border: 1px solid {p.outline_variant};
+    border-radius: {_px(r_md)};
+    margin-top: {_px(tokens.SPACE_LG)};
+    padding-top: {_px(tokens.SPACE_MD)};
+    font-weight: {tokens.WEIGHT_BOLD};
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 {_px(tokens.SPACE_SM)};
+    left: {_px(tokens.SPACE_MD)};
+    color: {p.on_surface};
+}}
+
+/* Inputs and dropdowns: clean surfaces with subtle outline */
 QLineEdit, QComboBox, QPlainTextEdit {{
     background-color: {p.surface_sunken};
-    border: 1px solid transparent;
+    border: 1px solid {p.outline_variant};
     border-radius: {_px(r_sm)};
     padding: {_px(tokens.SPACE_XS)} {_px(tokens.SPACE_SM)};
     selection-background-color: {p.surface_selected};
@@ -146,40 +167,56 @@ QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus {{
 }}
 QLineEdit:disabled, QComboBox:disabled {{
     color: {p.on_surface_muted};
+    background-color: {p.surface_sunken};
+    border-color: {p.outline_variant};
 }}
 
-QComboBox::drop-down {{ border: none; width: {_px(tokens.SPACE_2XL)}; }}
+QComboBox::drop-down {{
+    border: none;
+    width: {_px(tokens.SPACE_2XL)};
+}}
 QComboBox QAbstractItemView {{
     background-color: {p.surface_container};
-    border: 1px solid {p.outline};
+    border: 1px solid {p.outline_variant};
     border-radius: {_px(r_sm)};
     selection-background-color: {p.surface_selected};
     selection-color: {p.on_surface};
     outline: none;
+    padding: {_px(tokens.SPACE_XS)};
 }}
 
+/* Standard and interactive buttons */
 QPushButton {{
     background-color: {p.surface_container};
-    border: 1px solid {p.outline};
+    border: 1px solid {p.outline_variant};
     border-radius: {_px(r_md)};
     padding: {_px(tokens.SPACE_SM)} {_px(tokens.SPACE_LG)};
+    font-weight: {tokens.WEIGHT_REGULAR};
 }}
-QPushButton:hover {{ background-color: {hover}; }}
-QPushButton:pressed {{ background-color: {p.surface_selected}; }}
+QPushButton:hover {{
+    background-color: {hover};
+    border-color: {p.outline};
+}}
+QPushButton:pressed {{
+    background-color: {p.surface_selected};
+}}
 QPushButton:disabled {{
     color: {p.on_surface_muted};
     border-color: {p.outline_variant};
+    background-color: {p.surface_sunken};
 }}
 
-/* The one filled button on screen. Anything else filled would compete with
-   it for the eye, which is what makes "Download Selected" findable. */
+/* The primary hero action button */
 QPushButton#primary {{
     background-color: {accent};
     color: {on_accent};
-    border-color: {accent};
+    border: 1px solid {accent};
     font-weight: {tokens.WEIGHT_BOLD};
 }}
-QPushButton#primary:hover {{ background-color: {p.accent_hover}; }}
+QPushButton#primary:hover {{
+    background-color: {p.accent_hover};
+    border-color: {p.accent_hover};
+}}
 QPushButton#primary:disabled {{
     background-color: {p.surface_sunken};
     color: {p.on_surface_muted};
@@ -188,15 +225,14 @@ QPushButton#primary:disabled {{
 
 QPushButton#ghost {{
     background-color: transparent;
-    border-color: transparent;
+    border: 1px solid transparent;
     color: {p.on_surface_secondary};
 }}
-QPushButton#ghost:hover {{ background-color: {hover}; }}
+QPushButton#ghost:hover {{
+    background-color: {hover};
+    color: {p.on_surface};
+}}
 
-/* The one destructive action on screen. A filled danger button would compete
-   with the primary action for the eye, so this is a tinted border instead:
-   it reads as "this one ends things" without becoming a second focal point.
-   Used only for "Cancel rest" in the rename dialog. */
 QPushButton#destructive {{
     background-color: transparent;
     border: 1px solid {p.danger};
@@ -207,33 +243,61 @@ QPushButton#destructive:hover {{
     color: {p.on_danger};
 }}
 
-QRadioButton, QCheckBox {{ spacing: {_px(tokens.SPACE_SM)}; }}
-QCheckBox::indicator, QRadioButton::indicator {{
-    width: {_px(tokens.FONT_SIZE_BODY)};
-    height: {_px(tokens.FONT_SIZE_BODY)};
+/* Checkboxes and radio options */
+QRadioButton, QCheckBox {{
+    spacing: {_px(tokens.SPACE_SM)};
+    background: transparent;
 }}
 QCheckBox::indicator {{
+    width: 14px;
+    height: 14px;
     border-radius: {_px(r_sm)};
     border: 1px solid {p.outline};
     background-color: {p.surface_sunken};
 }}
-QCheckBox::indicator:checked {{ background-color: {accent}; border-color: {accent}; }}
+QCheckBox::indicator:checked {{
+    background-color: {accent};
+    border-color: {accent};
+}}
 QRadioButton::indicator {{
-    border-radius: {_px(tokens.FONT_SIZE_BODY)};
+    width: 12px;
+    height: 12px;
+    border-radius: 7px;
     border: 1px solid {p.outline};
     background-color: {p.surface_sunken};
 }}
 QRadioButton::indicator:checked {{
-    border: {_px(max(4, tokens.FONT_SIZE_BODY // 2))} solid {accent};
-    background-color: {p.surface_sunken};
+    width: 6px;
+    height: 6px;
+    border: 4px solid {accent};
+    background-color: {p.surface_container};
 }}
 
-/* The log pane. Sunken, square-cornered inside the padded window, and
-   monospaced so downloaded filenames line up. */
+/* Table view styling */
+QTableView {{
+    background-color: {p.surface_sunken};
+    border: 1px solid {p.outline_variant};
+    border-radius: {_px(r_md)};
+    selection-background-color: {p.surface_selected};
+    selection-color: {p.on_surface};
+    gridline-color: transparent;
+    outline: none;
+}}
+QHeaderView::section {{
+    background-color: {p.surface_container};
+    color: {p.on_surface_secondary};
+    font-size: {_px(tokens.FONT_SIZE_CAPTION)};
+    font-weight: {tokens.WEIGHT_BOLD};
+    border: none;
+    border-bottom: 1px solid {p.outline_variant};
+    padding: {_px(tokens.SPACE_XS)} {_px(tokens.SPACE_SM)};
+}}
+
+/* The log pane */
 QPlainTextEdit#log {{
     background-color: {p.surface_sunken};
     color: {p.on_surface_secondary};
-    border: none;
+    border: 1px solid {p.outline_variant};
     border-radius: {_px(r_md)};
     font-family: "{fonts.mono_family_name()}";
     font-size: {_px(tokens.FONT_SIZE_LOG)};
@@ -242,19 +306,18 @@ QPlainTextEdit#log {{
 
 QProgressBar {{
     background-color: {p.surface_sunken};
-    border: none;
-    border-radius: {_px(r_sm)};
-    height: {_px(tokens.SPACE_XL)};
+    border: 1px solid {p.outline_variant};
+    border-radius: 4px;
+    height: 10px;
     text-align: center;
     color: {p.on_surface_secondary};
 }}
 QProgressBar::chunk {{
     background-color: {accent};
-    border-radius: {_px(r_sm)};
+    border-radius: 3px;
 }}
 
-/* Type roles. The stylesheet is the only place a font size is expressed,
-   so the type scale has exactly one definition in the Qt UI. */
+/* Typography roles */
 QLabel#title {{
     font-size: {_px(tokens.FONT_SIZE_TITLE)};
     font-weight: {tokens.WEIGHT_BOLD};
@@ -276,10 +339,35 @@ QLabel#captionBold {{
     font-weight: {tokens.WEIGHT_BOLD};
 }}
 QLabel#numeric {{
-    /* Real tabular figures, so the status column does not jitter as the
-       digits change. Qt supports tnum directly; Tk has to use a monospace
-       family for the same effect. */
     font-size: {_px(tokens.FONT_SIZE_CAPTION)};
+}}
+
+/* Badges */
+QLabel#badge {{
+    background-color: {p.surface_selected};
+    color: {p.on_surface};
+    border-radius: {_px(r_sm)};
+    padding: 2px {_px(tokens.SPACE_SM)};
+    font-size: {_px(tokens.FONT_SIZE_CAPTION)};
+    font-weight: {tokens.WEIGHT_BOLD};
+}}
+QLabel#badge_success {{
+    background-color: {p.surface_sunken};
+    color: {p.success};
+    border: 1px solid {p.outline_variant};
+    border-radius: {_px(r_sm)};
+    padding: 2px {_px(tokens.SPACE_SM)};
+    font-size: {_px(tokens.FONT_SIZE_CAPTION)};
+    font-weight: {tokens.WEIGHT_BOLD};
+}}
+QLabel#badge_info {{
+    background-color: {p.surface_sunken};
+    color: {p.info};
+    border: 1px solid {p.outline_variant};
+    border-radius: {_px(r_sm)};
+    padding: 2px {_px(tokens.SPACE_SM)};
+    font-size: {_px(tokens.FONT_SIZE_CAPTION)};
+    font-weight: {tokens.WEIGHT_BOLD};
 }}
 
 QToolTip {{
@@ -300,7 +388,9 @@ QScrollBar::handle:vertical {{
     border-radius: {_px(tokens.RADIUS_SM)};
     min-height: {_px(tokens.SPACE_2XL)};
 }}
-QScrollBar::handle:vertical:hover {{ background: {p.outline}; }}
+QScrollBar::handle:vertical:hover {{
+    background: {p.outline};
+}}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
 

@@ -100,28 +100,40 @@ class SongDelegate(QStyledItemDelegate):
         if song is None:
             return
         if song.thumb is not None:
-            self._paint_thumb(painter, rect, song.thumb)
+            self._paint_thumb(painter, rect, song.thumb, is_checked=song.checked)
             return
-        painter.setPen(theme.qcolor("accent", self._dark))
-        painter.drawText(rect, int(Qt.AlignmentFlag.AlignCenter), TICK)
+        is_checked = song.checked
+        painter.setPen(theme.qcolor("accent" if is_checked else "on_surface_muted", self._dark))
+        painter.drawText(rect, int(Qt.AlignmentFlag.AlignCenter), TICK if is_checked else "·")
 
-    def _paint_thumb(self, painter, rect: QRect, pixmap) -> None:
+    def _paint_thumb(self, painter, rect: QRect, pixmap, is_checked: bool = True) -> None:
         """Draw the artwork centred in the cell, fitted to the row height.
 
         The width is derived from the height rather than using the token's
         16:9 width, because a fixed width that exceeds the column is what made
         the artwork spill past the tick cell's edge in the first render.
         """
-        avail = min(rect.width() - tokens.SPACE_XS, rect.height()
-                    - tokens.SPACE_SM)
-        if avail <= 0:
+        from PySide6.QtGui import QPainterPath
+
+        avail_w = rect.width() - tokens.SPACE_MD
+        avail_h = rect.height() - tokens.SPACE_SM
+        if avail_w <= 0 or avail_h <= 0:
             return
         scaled = pixmap.scaled(
-            int(avail), int(avail), Qt.AspectRatioMode.KeepAspectRatio,
+            int(avail_w), int(avail_h), Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation)
         x = rect.x() + (rect.width() - scaled.width()) // 2
         y = rect.y() + (rect.height() - scaled.height()) // 2
+        dest_rect = QRectF(x, y, scaled.width(), scaled.height())
+
+        painter.save()
+        if not is_checked:
+            painter.setOpacity(0.35)
+        path = QPainterPath()
+        path.addRoundedRect(dest_rect, tokens.RADIUS_SM, tokens.RADIUS_SM)
+        painter.setClipPath(path)
         painter.drawPixmap(x, y, scaled)
+        painter.restore()
 
     def _paint_text(self, painter, rect, index, col, selected) -> None:
         from . import theme
@@ -213,13 +225,13 @@ class SongList(QWidget):
         blay.setSpacing(tokens.SPACE_SM)
 
         self.filter_entry = QLineEdit()
-        self.filter_entry.setPlaceholderText("Search songs")
+        self.filter_entry.setPlaceholderText("Search songs...")
         self.filter_entry.setClearButtonEnabled(True)
         self.filter_entry.textChanged.connect(self._on_search_changed)
         blay.addWidget(self.filter_entry, 1)
 
         self.count_label = QLabel("")
-        self.count_label.setObjectName("secondary")
+        self.count_label.setObjectName("badge")
         blay.addWidget(self.count_label, 0)
 
         tick_all_btn = QPushButton("Tick all")

@@ -165,76 +165,68 @@ class Palette:
 # Light theme. Accent text uses the darker standalone variants so it clears
 # 4.5:1 on white; the mid-tone accent is reserved for fills.
 LIGHT = Palette(
-    surface="#fafafb",
+    surface="#f8fafc",
     surface_container="#ffffff",
-    surface_sunken="#f2f2f4",
-    surface_hover="#eeeef0",
-    surface_selected="#e3e8ee",
-    surface_subtle="#f7f7f9",
+    surface_sunken="#f1f5f9",
+    surface_hover="#e2e8f0",
+    surface_selected="#e0e7ff",
+    surface_subtle="#f8fafc",
 
-    on_surface="#1c1c1e",
-    on_surface_secondary="#5b5b60",
-    on_surface_muted="#7a7a80",
+    on_surface="#0f172a",
+    on_surface_secondary="#475569",
+    on_surface_muted="#64748b",
 
-    # `outline` is held to 3:1 because it carries interactive boundaries, so
-    # it is a mid-grey rather than the hairline most themes use for dividers
-    # (that role is `outline_variant`).
-    outline="#7c7c82",
-    outline_variant="#e4e4e8",
+    outline="#64748b",
+    outline_variant="#e2e8f0",
 
-    # Accent. In light mode this is the darker slate so white label text on it
-    # clears 4.5:1. The mid-tone `#6f8396` only reaches 3.92:1 against white
-    # and would ship unreadable button labels, so it is not used as a fill.
-    accent="#526678",
+    accent="#4338ca",
     on_accent="#ffffff",
-    accent_hover="#3f5261",
+    accent_hover="#3730a3",
 
-    success="#15772e",
+    success="#15803d",
     on_success="#ffffff",
-    warning="#905300",
+    warning="#b45309",
     on_warning="#ffffff",
-    danger="#c00023",
+    danger="#b91c1c",
     on_danger="#ffffff",
-    info="#0461be",
+    info="#0369a1",
     on_info="#ffffff",
 
-    selection="#d5dee6",
-    focus_ring="#0461be",
+    selection="#e0e7ff",
+    focus_ring="#4338ca",
 )
 
-# Dark theme. Not an inversion: the accents shift lighter and desaturate, and
-# the background is a lifted near-black rather than #000000, which would cause
-# halation and smear bright text.
+# Dark theme. Modern deep slate surfaces with vibrant indigo accent and crisp semantic states.
 DARK = Palette(
-    surface="#222226",
-    surface_container="#2e2e32",
-    surface_sunken="#1d1d20",
-    surface_hover="#34343a",
-    surface_selected="#2a3138",
-    surface_subtle="#22222a",
+    surface="#0f172a",
+    surface_container="#1e293b",
+    surface_sunken="#0b0f19",
+    surface_hover="#2c3b52",
+    surface_selected="#1e3450",
+    surface_subtle="#141f32",
 
-    on_surface="#e8e6e3",
-    on_surface_secondary="#b0aea9",
-    on_surface_muted="#86857f",
+    on_surface="#f8fafc",
+    on_surface_secondary="#a5b4c7",
+    on_surface_muted="#64748b",
 
-    outline="#7c7c82",
-    outline_variant="#33333a",
+    outline="#64748b",
+    outline_variant="#334155",
 
-    accent="#bbd1e5",
-    on_accent="#1b2733",
-    accent_hover="#d5e4f0",
+    accent="#818cf8",
+    on_accent="#0f172a",
+    accent_hover="#a5b4fc",
 
-    success="#8de698",
-    on_success="#12240f",
-    warning="#ffc057",
-    on_warning="#2b1d00",
-    danger="#ff888c",
-    on_danger="#2c0d10",
-    info="#81d0ff",
-    on_info="#00243a",
+    success="#4ade80",
+    on_success="#052e16",
+    warning="#fbbf24",
+    on_warning="#451a03",
+    danger="#f87171",
+    on_danger="#450a0a",
+    info="#38bdf8",
+    on_info="#082f49",
 
-    selection="#3a4a58",
-    focus_ring="#81d0ff",
+    selection="#1e3450",
+    focus_ring="#818cf8",
 )
 
 PALETTES = {"light": LIGHT, "dark": DARK}

@@ -112,6 +112,8 @@ def main() -> int:
     win = build(dark)
     if args.media == "Video":
         win.rad_video.setChecked(True)
+    else:
+        win.rad_music.setChecked(True)
     qapp.processEvents()
     win.grab().save(args.out)
     print(f"wrote {args.out}  ({win.width()}x{win.height()})")

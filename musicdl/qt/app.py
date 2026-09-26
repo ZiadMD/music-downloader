@@ -323,11 +323,13 @@ class MainWindow(QMainWindow):
 
     def _build_url_row(self) -> QWidget:
         box = QWidget()
+        box.setObjectName("card")
         row = QHBoxLayout(box)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(tokens.SPACE_SM)
+        row.setContentsMargins(
+            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD)
+        row.setSpacing(tokens.SPACE_MD)
 
-        row.addWidget(_label("Link"))
+        row.addWidget(_label("Link", _CAPTION))
         self.url_edit = QLineEdit(self.cfg.get("last_url", ""))
         self.url_edit.setPlaceholderText(
             "Paste a YouTube playlist or video link")
@@ -346,10 +348,11 @@ class MainWindow(QMainWindow):
         return box
 
     def _build_format_row(self) -> QWidget:
-        box = QGroupBox("Format")
+        box = QWidget()
+        box.setObjectName("card")
         row = QHBoxLayout(box)
         row.setContentsMargins(
-            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_LG)
+            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD)
         row.setSpacing(tokens.SPACE_MD)
 
         # Each media type's settings live in their own container so
@@ -358,8 +361,8 @@ class MainWindow(QMainWindow):
         self.type_group = self._group_widget()
         trow = QHBoxLayout(self.type_group)
         trow.setContentsMargins(0, 0, 0, 0)
-        trow.setSpacing(tokens.SPACE_SM)
-        trow.addWidget(_label("Type"))
+        trow.setSpacing(tokens.SPACE_MD)
+        trow.addWidget(_label("Type", _CAPTION))
         self.media_group = QButtonGroup(self)
         self.rad_music = QRadioButton(MEDIA_MUSIC)
         self.rad_video = QRadioButton(MEDIA_VIDEO)
@@ -378,13 +381,13 @@ class MainWindow(QMainWindow):
         arow = QHBoxLayout(self.audio_group)
         arow.setContentsMargins(0, 0, 0, 0)
         arow.setSpacing(tokens.SPACE_SM)
-        arow.addWidget(_label("Audio"))
+        arow.addWidget(_label("Audio", _CAPTION))
         self.format_combo = QComboBox()
         self.format_combo.addItems(list(core.AUDIO_FORMATS))
         self.format_combo.setCurrentText(self.cfg.get("format", "MP3"))
         arow.addWidget(self.format_combo)
         arow.addSpacing(tokens.SPACE_LG)
-        arow.addWidget(_label("Quality"))
+        arow.addWidget(_label("Quality", _CAPTION))
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(list(core.QUALITIES))
         self.quality_combo.setCurrentText(self.cfg.get("quality", "192"))
@@ -395,7 +398,7 @@ class MainWindow(QMainWindow):
         vrow = QHBoxLayout(self.video_group)
         vrow.setContentsMargins(0, 0, 0, 0)
         vrow.setSpacing(tokens.SPACE_SM)
-        vrow.addWidget(_label("Resolution"))
+        vrow.addWidget(_label("Resolution", _CAPTION))
         self.res_combo = QComboBox()
         self.res_combo.addItems(list(core.VIDEO_RESOLUTIONS))
         self.res_combo.setCurrentText(self.cfg.get("resolution", "Best"))
@@ -414,14 +417,16 @@ class MainWindow(QMainWindow):
 
     def _build_output_row(self) -> QWidget:
         box = QWidget()
+        box.setObjectName("card")
         outer = QVBoxLayout(box)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(tokens.SPACE_MD)
+        outer.setContentsMargins(
+            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD)
+        outer.setSpacing(tokens.SPACE_SM)
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(tokens.SPACE_SM)
-        row.addWidget(_label("Save to"))
+        row.addWidget(_label("Save to", _CAPTION))
         self.dir_edit = QLineEdit(self.cfg.get("output_dir", ""))
         self.dir_edit.setPlaceholderText("Choose a folder")
         row.addWidget(self.dir_edit, 1)
@@ -434,7 +439,7 @@ class MainWindow(QMainWindow):
 
         opts = QHBoxLayout()
         opts.setContentsMargins(0, 0, 0, 0)
-        opts.setSpacing(tokens.SPACE_SM)
+        opts.setSpacing(tokens.SPACE_MD)
 
         # Artwork embedding is audio-only, so the toggle sits in its own
         # container that on_media_changed hides. In a shared row it would drag
