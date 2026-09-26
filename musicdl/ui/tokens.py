@@ -41,7 +41,7 @@ Rules this system exists to enforce
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # --------------------------------------------------------------- spacing scale
 # A 4px base grid. Every gap in the app is one of these; nothing is arbitrary.

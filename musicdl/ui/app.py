@@ -19,6 +19,7 @@ from ..cleanup import cleanup_partials
 from ..cookies import validate_cookie_file
 from ..formatting import fmt_bytes, fmt_eta, fmt_speed, plural
 from . import downloader as dl
+from . import fonts
 from . import theme as theme_mod
 from .dialogs import RenamePrompter
 from .widgets import PlaylistTable
@@ -112,10 +113,10 @@ class App:
         title_box = tb.Frame(header)
         title_box.grid(row=0, column=0, sticky="w")
         tb.Label(title_box, text=APP_TITLE,
-                 font=("TkDefaultFont", 15, "bold")).pack(anchor="w")
+                 font=fonts.title()).pack(anchor="w")
         self.subtitle_var = tk.StringVar(value="Load a playlist or a single video to begin.")
         tb.Label(title_box, textvariable=self.subtitle_var,
-                 bootstyle=MUTED, font=("TkDefaultFont", 9)).pack(anchor="w")
+                 bootstyle=MUTED, font=fonts.secondary()).pack(anchor="w")
 
         self.theme_btn = tb.Button(header, bootstyle="secondary-outline", width=4,
                                    command=self.toggle_theme)
@@ -128,7 +129,7 @@ class App:
         box.grid(row=ROW_URL, column=0, sticky="ew", **pad)
         box.columnconfigure(1, weight=1)
 
-        tb.Label(box, text="Link", font=("TkDefaultFont", 9, "bold")).grid(
+        tb.Label(box, text="Link", font=fonts.caption_bold()).grid(
             row=0, column=0, sticky="w")
         self.url_var = tk.StringVar(value=self.cfg["last_url"])
         self.url_entry = tb.Entry(box, textvariable=self.url_var)
@@ -179,7 +180,7 @@ class App:
         box.grid(row=ROW_OUTPUT, column=0, sticky="ew", **pad)
         box.columnconfigure(1, weight=1)
 
-        tb.Label(box, text="Save to", font=("TkDefaultFont", 9, "bold")).grid(
+        tb.Label(box, text="Save to", font=fonts.caption_bold()).grid(
             row=0, column=0, sticky="w")
         self.dir_var = tk.StringVar(value=self.cfg["output_dir"])
         tb.Entry(box, textvariable=self.dir_var).grid(row=0, column=1, sticky="ew",
@@ -250,12 +251,12 @@ class App:
 
         self.status_var = tk.StringVar(value="Ready.")
         tb.Label(frame, textvariable=self.status_var,
-                 font=("TkDefaultFont", 9)).grid(row=ROW_STATUS, column=0, sticky="w",
+                 font=fonts.secondary()).grid(row=ROW_STATUS, column=0, sticky="w",
                                                 padx=8, pady=(6, 0))
 
         self.log = scrolledtext.ScrolledText(
             frame, height=7, wrap="word", relief="flat", borderwidth=0,
-            state=tk.DISABLED, font=("TkFixedFont", 9))
+            state=tk.DISABLED, font=fonts.log())
         self.log.grid(row=ROW_LOG, column=0, sticky="ew", **pad)
         # tk.Text is not themed by ttkbootstrap; theme_mod.apply retints these.
         self.root._musicdl_text_widgets = (self.log,)
@@ -516,12 +517,9 @@ class App:
         if now - self._last_detail < DETAIL_THROTTLE_SECONDS:
             return
         self._last_detail = now
-        text = (f"Song {self._song_i}/{n} · {int(frac * 100)}% · "
+        text = (f"Song {self._song_i}/{n} · "
+                f"{fonts.progress_text(int(frac * 100), fmt_speed(speed), fmt_eta(eta))} · "
                 f"{fmt_bytes(downloaded)} of {fmt_bytes(total)}")
-        if speed:
-            text += f" · {fmt_speed(speed)}"
-        if eta:
-            text += f" · ETA {fmt_eta(eta)}"
         self.detail_var.set(text)
 
     def _on_song_index(self, i, _total):
@@ -529,7 +527,7 @@ class App:
 
     def _on_tick(self, done, active, total):
         self.progress.configure(maximum=total, value=done)
-        self.detail_var.set(f"{done}/{total} done · {active} downloading now")
+        self.detail_var.set(fonts.tick_text(done, active, total))
 
     def _on_row_status(self, vid, text):
         self.table.set_status(vid, text)
@@ -537,10 +535,8 @@ class App:
     def _on_row_progress(self, vid, downloaded, total, speed):
         if not total:
             return
-        text = f"Downloading {int(downloaded / total * 100)}%"
-        if speed:
-            text += f" · {fmt_speed(speed)}"
-        self.table.set_status(vid, text)
+        self.table.set_status(
+            vid, f"Downloading {fonts.progress_text(int(downloaded / total * 100), fmt_speed(speed))}")
 
     def _on_set_expected(self, n):
         self._expected_n = n or 1

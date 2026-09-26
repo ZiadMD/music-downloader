@@ -7,7 +7,6 @@ degrades to "not found" instead of raising when nothing is installed.
 
 import os
 
-import pytest
 
 from musicdl import paths
 

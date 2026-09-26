@@ -14,7 +14,7 @@ import ttkbootstrap as tb
 from PIL import Image, ImageDraw, ImageTk
 
 from ..naming import is_saved_match
-from . import tokens
+from . import fonts, tokens
 
 # Thumbnail geometry. 16:9 at 80x45 suits the 56px row height with padding.
 THUMB_SIZE = tokens.THUMB_SIZE
@@ -108,11 +108,17 @@ class PlaylistTable(tb.Frame):
     """
 
     COLUMNS = ("pick", "title", "artist", "status")
-    ROW_HEIGHT = 66
+    ROW_HEIGHT = tokens.ROW_HEIGHT
     TICK = "✓"
     # Rows visible before the table scrolls. Keeps the window's natural
     # height sane on tall playlists; the table still grows with the window.
     VISIBLE_ROWS = 8
+
+    # Fixed column widths. The thumbnail and tick columns are narrow and never
+    # stretch; the status column is sized for its longest phrase so rows do not
+    # reflow when their state changes.
+    THUMB_COLUMN = 96
+    STATUS_COLUMN = 150
 
     def __init__(self, master, emit, dark=True):
         super().__init__(master, padding=(2, 2))
@@ -160,7 +166,9 @@ class PlaylistTable(tb.Frame):
 
     def _build_tree(self):
         style = tb.Style()
-        style.configure("Playlist.Treeview", rowheight=self.ROW_HEIGHT)
+        style.configure("Playlist.Treeview", rowheight=self.ROW_HEIGHT,
+                        font=fonts.body())
+        style.configure("Playlist.Treeview.Heading", font=fonts.caption_bold())
         self.tree = tb.Treeview(
             self, columns=self.COLUMNS, show="tree headings",
             style="Playlist.Treeview", height=self.VISIBLE_ROWS,
@@ -170,23 +178,25 @@ class PlaylistTable(tb.Frame):
         self.tree.heading("title", text="Song")
         self.tree.heading("artist", text="Artist")
         self.tree.heading("status", text="Status")
-        self.tree.column("#0", width=112, anchor="center", stretch=False,
-                         minwidth=112)
-        self.tree.column("pick", width=40, anchor="center", stretch=False,
-                         minwidth=40)
+        # The tick column is a fixed 40px and carries no header of its own; the
+        # thumbnail column is likewise fixed. Only the text columns stretch, so
+        # a long title never squeezes the status column out of alignment.
+        self.tree.column("#0", width=self.THUMB_COLUMN, anchor="center",
+                         stretch=False, minwidth=self.THUMB_COLUMN)
+        self.tree.column("pick", width=tokens.CHECKBOX_COLUMN, anchor="center",
+                         stretch=False, minwidth=tokens.CHECKBOX_COLUMN)
         self.tree.column("title", width=380, anchor="w")
         self.tree.column("artist", width=180, anchor="w")
-        self.tree.column("status", width=150, anchor="center")
+        # Wide enough for the longest status phrase plus its glyph, so the
+        # column never reflows when a row changes state.
+        self.tree.column("status", width=self.STATUS_COLUMN, anchor="center",
+                         stretch=False, minwidth=self.STATUS_COLUMN)
         self.tree.grid(row=1, column=0, sticky="nsew")
 
         vsb = tb.Scrollbar(self, orient="vertical", command=self.tree.yview)
         vsb.grid(row=1, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=vsb.set)
 
-        self.tree.tag_configure("ok", foreground="#2eb85c")
-        self.tree.tag_configure("missing", foreground="#dc3545")
-        self.tree.tag_configure("busy", foreground="#4dabf7")
-        self.tree.tag_configure("muted", foreground="#868e96")
         self._apply_tags(tokens.palette(self._dark))
 
         self.tree.bind("<Button-3>", self._on_right_click)
