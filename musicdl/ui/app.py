@@ -48,6 +48,16 @@ DETAIL_THROTTLE_SECONDS = 0.25
 PICK = "primary"
 MUTED = "secondary"
 
+# The load button accepts a playlist link or a single video link, so the
+# label follows what is actually in the box rather than claiming "playlist"
+# either way. Both are the same width so relabelling never resizes the button
+# out from under a click.
+LOAD_LABEL = "Load Playlist"
+SINGLE_LABEL = "Load Video"
+LOAD_TOOLTIP = "Load every song in this playlist."
+SINGLE_TOOLTIP = ("This link points at one video, so only that video will "
+                  "be loaded - not the playlist it came from.")
+
 
 class App:
     """Main window: settings, the playlist table, progress and the log."""
@@ -165,9 +175,39 @@ class App:
         self.url_entry = tb.Entry(box, textvariable=self.url_var)
         self.url_entry.grid(row=0, column=1, sticky="ew", padx=(8, 0))
         self.url_entry.bind("<Return>", lambda _e: self.load_playlist())
-        self.load_btn = tb.Button(box, text="Load Playlist", bootstyle="info",
+        # "Load Playlist" was wrong: the same field accepts a single video
+        # link, and core.looks_like_single_video exists precisely to tell the
+        # two apart. The label now says what the button actually does. The
+        # width is fixed so a relabel cannot resize the button mid-click.
+        self.load_btn = tb.Button(box, text=LOAD_LABEL, bootstyle="info",
                                   command=self.load_playlist, width=15)
         self.load_btn.grid(row=0, column=2, padx=(8, 0))
+        # Keep the label honest about what is in the box, once it is parsed.
+        self.url_var.trace_add("write", lambda *_: self._on_url_change())
+
+    def _on_url_change(self):
+        """Point the load button's tooltip at what the link actually is.
+
+        The pasted link is usually a playlist, but a shared ``watch?v=`` link
+        is a single video and yt-dlp would otherwise pull the whole playlist
+        context. The app already handles that; this only makes the distinction
+        visible before the user commits.
+        """
+        url = (self.url_var.get() or "").strip()
+        if not url:
+            self.load_btn.configure(text=LOAD_LABEL)
+            self._set_load_tooltip(LOAD_TOOLTIP)
+            return
+        if core.looks_like_single_video(url):
+            self.load_btn.configure(text=SINGLE_LABEL)
+            self._set_load_tooltip(SINGLE_TOOLTIP)
+        else:
+            self.load_btn.configure(text=LOAD_LABEL)
+            self._set_load_tooltip(LOAD_TOOLTIP)
+
+    def _set_load_tooltip(self, text):
+        """Attach a tooltip to the load button, replacing any existing one."""
+        self._load_tip = tb.ToolTip(self.load_btn, text=text, bootstyle=MUTED)
 
     def _build_options_row(self, frame, pad):
         box = tb.Labelframe(frame, text="Format", padding=(10, 8))
@@ -184,26 +224,41 @@ class App:
             variable=self.media_var, value="Video", command=self._on_media_change)
         self.rad_video.grid(row=0, column=2, padx=(4, 16))
 
-        tb.Label(box, text="Audio").grid(row=0, column=3, sticky="w")
+        # Audio and video have different settings, so each group is shown only
+        # when it applies. A greyed-out control is still on screen and still
+        # asks the user to make a choice they cannot make; hiding it is the
+        # honest answer. The grid columns stay in place either way, so toggling
+        # does not make the whole panel reflow.
+        self.audio_label = tb.Label(box, text="Audio")
+        self.audio_label.grid(row=0, column=3, sticky="w")
         self.format_var = tk.StringVar(value=self.cfg["format"])
         self.format_combo = tb.Combobox(
             box, textvariable=self.format_var, state=READONLY, width=13,
             values=list(core.AUDIO_FORMATS))
         self.format_combo.grid(row=0, column=4, padx=(4, 16))
 
-        tb.Label(box, text="Quality").grid(row=0, column=5, sticky="w")
+        self.quality_label = tb.Label(box, text="Quality")
+        self.quality_label.grid(row=0, column=5, sticky="w")
         self.quality_var = tk.StringVar(value=self.cfg["quality"])
         self.quality_combo = tb.Combobox(
             box, textvariable=self.quality_var, state=READONLY, width=7,
             values=core.QUALITIES)
         self.quality_combo.grid(row=0, column=6, padx=(4, 16))
 
-        tb.Label(box, text="Resolution").grid(row=0, column=7, sticky="w")
+        self.res_label = tb.Label(box, text="Resolution")
+        self.res_label.grid(row=0, column=7, sticky="w")
         self.res_var = tk.StringVar(value=self.cfg["resolution"])
         self.res_combo = tb.Combobox(
-            box, textvariable=self.res_var, state=DISABLED, width=9,
+            box, textvariable=self.res_var, state=READONLY, width=9,
             values=core.VIDEO_RESOLUTIONS)
         self.res_combo.grid(row=0, column=8, padx=(4, 0))
+        # Grouped so the visibility toggle touches every widget in the group.
+        self.audio_widgets = (self.audio_label, self.format_combo,
+                              self.quality_label, self.quality_combo)
+        self.video_widgets = (self.res_label, self.res_combo)
+        # Artwork only applies to audio files; embedding a cover image in an
+        # MP4 is not something the app can do.
+        self.thumb_holder = None
 
     def _build_output_row(self, frame, pad):
         box = tb.Frame(frame)
@@ -220,11 +275,17 @@ class App:
 
         opts = tb.Frame(box)
         opts.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        opts.columnconfigure(1, weight=1)
 
+        # The artwork toggle is audio-only, so it lives in a one-column frame
+        # that _on_media_change can hide wholesale. Putting it in a shared row
+        # would mean hiding the neighbouring toggles with it.
+        self.thumb_holder = tb.Frame(opts)
+        self.thumb_holder.grid(row=0, column=0, sticky="w")
         self.thumb_var = tk.BooleanVar(value=self.cfg["thumbnail"])
         self.thumb_cb = tb.Checkbutton(
-            opts, text="Embed artwork", bootstyle="success-round-toggle",
-            variable=self.thumb_var)
+            self.thumb_holder, text="Embed artwork",
+            bootstyle="success-round-toggle", variable=self.thumb_var)
         self.thumb_cb.grid(row=0, column=0, sticky="w")
 
         self.parallel_var = tb.BooleanVar(value=self.cfg["parallel"])
@@ -438,10 +499,28 @@ class App:
         config.save(self.cfg)
 
     def _on_media_change(self):
+        """Show only the settings that apply to the chosen media type.
+
+        Audio and video have disjoint settings. Leaving the other set on
+        screen but disabled was worse than either extreme: it took up the room
+        it was going to take anyway, and asked for a decision the user could
+        not make. Hiding is reversible and keeps the panel honest about what
+        is actually going to be used.
+        """
         is_video = self.media_var.get() == "Video"
-        self.format_combo.configure(state=DISABLED if is_video else READONLY)
-        self.quality_combo.configure(state=DISABLED if is_video else READONLY)
-        self.res_combo.configure(state=READONLY if is_video else DISABLED)
+        for group, visible in ((self.audio_widgets, not is_video),
+                               (self.video_widgets, is_video)):
+            for w in group:
+                if visible:
+                    w.grid()
+                else:
+                    w.grid_remove()
+        # Cover art is an audio-only feature, so the toggle follows the type.
+        if self.thumb_holder is not None:
+            if is_video:
+                self.thumb_holder.grid_remove()
+            else:
+                self.thumb_holder.grid()
 
     def _on_parallel_toggle(self):
         on = bool(self.parallel_var.get())

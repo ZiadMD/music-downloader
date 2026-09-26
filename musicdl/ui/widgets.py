@@ -125,9 +125,11 @@ class PlaylistTable(tb.Frame):
 
     # Empty-state copy. It says what to do next rather than apologising for the
     # absence of content, and it stays to one line of instruction - a paragraph
-    # in the middle of an empty panel is just noise.
+    # in the middle of an empty panel is just noise. It says "playlist or
+    # video" because the field accepts both, and naming only one would send
+    # anyone pasting a single video link looking for a different button.
     EMPTY_TITLE = "No songs yet"
-    EMPTY_HINT = "Paste a playlist link above and choose Load Playlist."
+    EMPTY_HINT = "Paste a playlist or video link above, then choose Load."
     FILTER_TITLE = "Nothing matches"
     FILTER_HINT = "No song in this playlist matches the search."
 

@@ -293,7 +293,7 @@ def fetch_playlist(playlist_url: str, fix: str = "", cookiefile: str = ""):
         raw_entries = [info]
     entries = [e for e in (_entry_from_info(x) for x in raw_entries) if e]
     if not entries:
-        raise ValueError("No playlist found. Make sure the link points to a "
+        raise ValueError("Nothing to load. Make sure the link points to a "
                          "YouTube playlist or video.")
 
     title = info.get("title") if info.get("entries") else "Single video"
