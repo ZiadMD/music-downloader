@@ -12,7 +12,10 @@ import os
 
 from . import paths
 
-THEMES = ("dark", "light")
+# The theme is a three-state choice ('system', 'light', 'dark'). Duplicated
+# here rather than imported from musicdl.ui.theme so that loading settings
+# never pulls in Tk, which keeps this module testable headlessly.
+THEMES = ("system", "light", "dark")
 
 
 def _defaults() -> dict:
@@ -24,7 +27,7 @@ def _defaults() -> dict:
         "media": "Music",
         "resolution": "Best",
         "thumbnail": True,
-        "theme": "dark",
+        "theme": "system",
         "cookie_path": "",
         "parallel": False,
         "parallel_jobs": 3,
@@ -77,7 +80,7 @@ def load() -> dict:
         cfg["media"] = "Music"
 
     if cfg.get("theme") not in THEMES:
-        cfg["theme"] = "dark"
+        cfg["theme"] = "system"
     cfg["thumbnail"] = bool(cfg.get("thumbnail", True))
     cfg["parallel"] = bool(cfg.get("parallel", False))
     cfg["parallel_jobs"] = _clamp_jobs(cfg.get("parallel_jobs"))

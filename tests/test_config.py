@@ -32,7 +32,7 @@ class TestLoadDefaults:
     def test_no_file_returns_defaults(self, isolated_config):
         cfg = config.load()
         assert cfg["format"] == "MP3"
-        assert cfg["theme"] == "dark"
+        assert cfg["theme"] == "system"
         assert cfg["parallel_jobs"] == 3
 
     def test_output_dir_defaults_to_music_folder(self, isolated_config):
@@ -58,7 +58,12 @@ class TestValueValidation:
         assert cfg["quality"] == "192"
         assert cfg["media"] == "Music"
         assert cfg["resolution"] == "Best"
-        assert cfg["theme"] == "dark"
+        assert cfg["theme"] == "system"
+
+    @pytest.mark.parametrize("value", ["system", "light", "dark"])
+    def test_valid_theme_preserved(self, isolated_config, value):
+        write(isolated_config, {"theme": value})
+        assert config.load()["theme"] == value
 
     @pytest.mark.parametrize("raw,expected", [
         (0, 1), (1, 1), (3, 3), (6, 6), (99, 6), (-5, 1),

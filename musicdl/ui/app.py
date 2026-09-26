@@ -78,7 +78,8 @@ class App:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _cfg_is_dark(self) -> bool:
-        return self.cfg.get("theme", "dark") == "dark"
+        """Resolve the stored theme choice (which may be 'system') to dark."""
+        return theme_mod.is_dark(self.cfg.get("theme", theme_mod.THEME_SYSTEM))
 
     # ------------------------------------------------------------------- build
     def _build_ui(self):
@@ -119,7 +120,7 @@ class App:
                  bootstyle=MUTED, font=fonts.secondary()).pack(anchor="w")
 
         self.theme_btn = tb.Button(header, bootstyle="secondary-outline", width=4,
-                                   command=self.toggle_theme)
+                                   command=self.choose_theme)
         self.theme_btn.grid(row=0, column=1, sticky="e")
         self._theme_icon = None
         self._update_theme_btn()
@@ -263,28 +264,74 @@ class App:
 
     # ----------------------------------------------------------------- theme
     def _update_theme_btn(self):
-        dark = self._cfg_is_dark()
+        """Show the current theme, and which mode 'system' resolved to."""
+        choice = self.cfg.get("theme", theme_mod.THEME_SYSTEM)
+        resolved = theme_mod.resolve(choice)
+        glyph = {"dark": "☾", "light": "☀"}[resolved]
         try:
-            icon = tb.Icon("sun" if dark else "moon", size=18, color="fg")
+            icon = tb.Icon("moon" if resolved == "dark" else "sun",
+                           size=18, color="fg")
             self._theme_icon = icon
             self.theme_btn.configure(image=icon, text="")
         except Exception:
-            self.theme_btn.configure(text="☀" if dark else "☾")
-        target = "light" if dark else "dark"
+            self.theme_btn.configure(text=glyph)
+        label = {"system": "System", "light": "Light", "dark": "Dark"}[choice]
+        suffix = f" (following system: {resolved})" if choice == "system" else ""
         try:
-            tb.ToolTip(self.theme_btn, text=f"Switch to {target} mode",
-                       bootstyle="light" if dark else "dark")
+            tb.ToolTip(self.theme_btn, text=f"Theme: {label}{suffix}",
+                       bootstyle="light" if resolved == "dark" else "dark")
         except Exception:
             pass
 
-    def toggle_theme(self):
-        self.cfg["theme"] = "light" if self._cfg_is_dark() else "dark"
-        self.style = theme_mod.apply(self.root, self._cfg_is_dark())
-        self.table.apply_style_colors(self._cfg_is_dark())
+    def choose_theme(self):
+        """Show the theme menu.
+
+        Three states rather than a toggle, because a two-state switch cannot
+        express 'follow the system' - and once you have set an explicit
+        preference there is no way back to following the OS.
+        """
+        current = self.cfg.get("theme", theme_mod.THEME_SYSTEM)
+        labels = {
+            theme_mod.THEME_SYSTEM: "Match system",
+            theme_mod.THEME_LIGHT: "Light",
+            theme_mod.THEME_DARK: "Dark",
+        }
+        menu = tk.Menu(self.root, tearoff=0)
+        for choice, label in labels.items():
+            prefix = "●  " if choice == current else "    "
+            menu.add_command(
+                label=f"{prefix}{label}",
+                command=lambda c=choice: self.set_theme(c),
+            )
+        x = self.theme_btn.winfo_rootx()
+        y = self.theme_btn.winfo_rooty() + self.theme_btn.winfo_height()
+        try:
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
+    def set_theme(self, choice):
+        self.cfg["theme"] = choice
+        self._apply_theme()
+        self._save_settings()
+        note = " (following system)" if choice == theme_mod.THEME_SYSTEM else ""
+        self._log(f">>> Theme: {choice}{note}.")
+
+    def _apply_theme(self):
+        dark = self._cfg_is_dark()
+        self.style = theme_mod.apply(self.root, dark)
+        self.table.apply_style_colors(dark)
         self._update_theme_btn()
         self._bar_style("")
-        self._save_settings()
-        self._log(f">>> Switched to {'dark' if self._cfg_is_dark() else 'light'} theme.")
+
+    def toggle_theme(self):
+        """Flip between light and dark, leaving 'system' behind.
+
+        Kept for the keyboard shortcut, which is a fast two-way action; picking
+        an explicit mode is what the menu button is for.
+        """
+        self.set_theme(theme_mod.THEME_LIGHT if self._cfg_is_dark()
+                       else theme_mod.THEME_DARK)
 
     # ---------------------------------------------------------------- helpers
     def _log(self, text):
@@ -355,7 +402,7 @@ class App:
             "media": self.media_var.get(),
             "resolution": self.res_var.get(),
             "thumbnail": self.thumb_var.get(),
-            "theme": "dark" if self._cfg_is_dark() else "light",
+            "theme": self.cfg.get("theme", theme_mod.THEME_SYSTEM),
             "parallel": self.parallel_var.get(),
             "parallel_jobs": self._restore_jobs() if self.parallel_var.get() else 3,
         })
@@ -612,7 +659,8 @@ def run() -> int:
     cfg = config.load()
     root = tb.Window(
         title=APP_TITLE,
-        themename=theme_mod.DARK if cfg.get("theme", "dark") == "dark" else theme_mod.LIGHT,
+        themename=theme_mod.ttk_theme(
+            theme_mod.is_dark(cfg.get("theme", theme_mod.THEME_SYSTEM))),
         size=WINDOW_SIZE,
         minsize=WINDOW_MINSIZE,
     )

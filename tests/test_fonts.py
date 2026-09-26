@@ -10,7 +10,6 @@ Two things are worth protecting here:
   width is asserted directly.
 """
 
-import tkinter as tk
 import pytest
 
 from musicdl.ui import fonts, tokens
@@ -18,16 +17,10 @@ from musicdl.ui import fonts, tokens
 tkfont = pytest.importorskip("tkinter.font")
 
 
-@pytest.fixture(scope="module")
-def root():
-    """One Tk root for the module; ttkbootstrap allows only one per process."""
-    try:
-        r = tk.Tk()
-    except tk.TclError:
-        pytest.skip("no display available")
-    r.withdraw()
-    yield r
-    r.destroy()
+@pytest.fixture
+def root(tk_root):
+    """The session-wide Tk root. Tests must not destroy it."""
+    return tk_root
 
 
 @pytest.fixture(autouse=True)
