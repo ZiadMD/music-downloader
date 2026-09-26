@@ -32,11 +32,28 @@ def table(tk_root):
     # to the focus widget, so a shortcut bound on the tree only fires when the
     # tree actually holds focus - without this the key goes nowhere and the
     # shortcut tests would pass or fail for the wrong reason.
-    t.tree.focus_set()
+    grab_focus(t.tree)
     tk_root.update()
     yield t
     t._loader.shutdown()
     t.destroy()
+
+
+def grab_focus(widget):
+    """Give ``widget`` keyboard focus in a way the compositor will honour.
+
+    ``focus_set`` is what the app uses, and it is the right call there. In a
+    test it is unreliable under Wayland: once a toplevel has been shown and
+    hidden a few times, the compositor stops granting it focus, so
+    ``focus_set`` silently becomes a no-op and any assertion about which
+    widget holds focus fails for a reason that has nothing to do with the
+    code under test.
+
+    ``focus_force`` sets focus inside the Tk process, bypassing the window
+    manager entirely, which is exactly what a headless test wants. Only the
+    tests use it - production behaviour is unchanged.
+    """
+    widget.focus_force()
 
 
 def press(widget, sequence):
@@ -97,7 +114,7 @@ class TestFilterShortcuts:
 
     def test_escape_clears_the_filter(self, table, tk_root):
         table.filter_var.set("Song 3")
-        table.filter_entry.focus_set()
+        grab_focus(table.filter_entry)
         press(table.filter_entry, "<Escape>")
         assert table.filter_var.get() == ""
         assert len(table.tree.get_children("")) == 6
@@ -105,7 +122,7 @@ class TestFilterShortcuts:
     def test_escape_when_already_empty_returns_focus_to_the_list(
             self, table, tk_root):
         """A second Escape should move on, not require a third press."""
-        table.filter_entry.focus_set()
+        grab_focus(table.filter_entry)
         press(table.filter_entry, "<Escape>")
         assert has_focus(tk_root, table.tree)
 
@@ -124,7 +141,7 @@ class TestFilterShortcuts:
 
 class TestSelectionShortcuts:
     def test_space_toggles_the_selection(self, table):
-        table.tree.focus_set()
+        grab_focus(table.tree)
         iids = table.visible_order()
         table.tree.selection_set(iids[:2])
         table.toggle_checked(table.vid_by_iid[iids[0]])
@@ -133,14 +150,14 @@ class TestSelectionShortcuts:
 
     def test_ctrl_a_ticks_everything(self, table):
         table.set_all_checked(False)
-        table.tree.focus_set()
+        grab_focus(table.tree)
         press(table.tree, "<Control-a>")
         assert len(table.checked_ids()) == 6
 
     def test_shift_space_sets_a_known_state(self, table):
         """Flipping a mixed selection is unpredictable; this sets it instead."""
         table.set_all_checked(False)
-        table.tree.focus_set()
+        grab_focus(table.tree)
         table.tree.selection_set(table.visible_order()[:3])
         press(table.tree, "<Shift-space>")
         assert all(table.checked[table.vid_by_iid[i]]
@@ -148,14 +165,14 @@ class TestSelectionShortcuts:
 
     def test_shift_space_unticks_a_fully_ticked_selection(self, table):
         table.set_all_checked(True)
-        table.tree.focus_set()
+        grab_focus(table.tree)
         table.tree.selection_set(table.visible_order()[:2])
         press(table.tree, "<Shift-space>")
         assert not any(table.checked[table.vid_by_iid[i]]
                        for i in table.tree.selection())
 
     def test_shift_space_with_nothing_selected_does_nothing(self, table):
-        table.tree.focus_set()
+        grab_focus(table.tree)
         table.tree.selection_remove(table.visible_order())
         before = dict(table.checked)
         press(table.tree, "<Shift-space>")
@@ -207,6 +224,6 @@ class TestFocusability:
         assert str(table.tree.cget("takefocus")) in ("1", "True", "true")
 
     def test_tree_accepts_focus(self, table, tk_root):
-        table.tree.focus_set()
+        grab_focus(table.tree)
         table.update()
         assert has_focus(tk_root, table.tree)
