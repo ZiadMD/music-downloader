@@ -55,6 +55,19 @@ config.local.json
 cookies.txt
 *.har
 
+# Downloaded media. The default output directory lives in the source tree on
+# a fresh checkout, so without this a single run leaves multi-hundred-megabyte
+# MP3s staged for the next `git add -A`.
+downloads/
+*.mp3
+*.m4a
+*.opus
+*.webm
+*.mkv
+*.part
+*.ytdl
+*.tmp
+
 # ---------------------------------------------------------------------------
 # Editors, OS, and CI
 # ---------------------------------------------------------------------------
