@@ -59,17 +59,17 @@ def _writable(path: str) -> bool:
 def _base_dir() -> str:
     """Best writable base for app-owned data.
 
-    Prefers a folder beside the executable (portable-app behaviour) but falls
-    back to the OS per-user directory when that location is read-only, e.g. a
-    Program Files install.
+    Order matters:
+      1. The OS per-user config directory, so state never accumulates inside
+         the source tree (a side effect of running from a checkout) or the
+         package directory.
+      2. A folder beside the executable, so a portable install stays
+         self-contained. Skipped when frozen on a read-only location such as
+         Program Files, which is what makes the portable form opt-in.
     """
-    candidates = []
+    candidates = [user_config_dir(), user_data_dir()]
     if is_frozen():
         candidates.append(os.path.dirname(sys.executable))
-    else:
-        candidates.append(os.path.dirname(os.path.abspath(__file__)))
-    candidates.append(user_config_dir())
-    candidates.append(user_data_dir())
     candidates.append(os.path.join(os.path.expanduser("~"), f".{APP_NAME}"))
     for cand in candidates:
         if cand and _writable(cand):
@@ -77,7 +77,7 @@ def _base_dir() -> str:
     return os.path.expanduser("~")
 
 
-def resolve_user_path(raw: str, fallback: str = "") -> str:
+def resolve_user_path(raw: str | None, fallback: str = "") -> str:
     """Expand ``~`` and environment variables in a user-supplied path.
 
     Returns ``fallback`` when ``raw`` is empty, so callers always get a usable
@@ -192,6 +192,7 @@ def migrate_legacy_files() -> list:
     """
     moved = []
     target_dir = _base_dir()
+    os.makedirs(target_dir, exist_ok=True)
     for src in legacy_files():
         dst = os.path.join(target_dir, os.path.basename(src))
         if not os.path.isfile(src) or os.path.abspath(src) == os.path.abspath(dst):
