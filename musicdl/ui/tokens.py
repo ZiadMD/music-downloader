@@ -120,6 +120,7 @@ class Palette:
     surface_sunken: str     # inputs, wells, table body
     surface_hover: str      # row hover
     surface_selected: str   # selected row / focused control
+    surface_subtle: str     # alternating row band, a 1-step lift off sunken
 
     # Foreground. Three weights only: full, secondary for supporting text,
     # and muted for disabled or placeholder content.
@@ -169,6 +170,7 @@ LIGHT = Palette(
     surface_sunken="#f2f2f4",
     surface_hover="#eeeef0",
     surface_selected="#e3e8ee",
+    surface_subtle="#f7f7f9",
 
     on_surface="#1c1c1e",
     on_surface_secondary="#5b5b60",
@@ -209,6 +211,7 @@ DARK = Palette(
     surface_sunken="#1d1d20",
     surface_hover="#34343a",
     surface_selected="#2a3138",
+    surface_subtle="#22222a",
 
     on_surface="#e8e6e3",
     on_surface_secondary="#b0aea9",

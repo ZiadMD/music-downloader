@@ -40,6 +40,9 @@ STATUS_TAGS = {
     "not": "muted",
 }
 
+# ttkbootstrap's name for de-emphasised foreground text.
+MUTED = "secondary"
+
 
 class ThumbnailLoader:
     """Fetches playlist artwork in the background.
@@ -120,6 +123,14 @@ class PlaylistTable(tb.Frame):
     THUMB_COLUMN = 96
     STATUS_COLUMN = 150
 
+    # Empty-state copy. It says what to do next rather than apologising for the
+    # absence of content, and it stays to one line of instruction - a paragraph
+    # in the middle of an empty panel is just noise.
+    EMPTY_TITLE = "No songs yet"
+    EMPTY_HINT = "Paste a playlist link above and choose Load Playlist."
+    FILTER_TITLE = "Nothing matches"
+    FILTER_HINT = "No song in this playlist matches the search."
+
     def __init__(self, master, emit, dark=True):
         super().__init__(master, padding=(2, 2))
         self._emit = emit
@@ -131,6 +142,7 @@ class PlaylistTable(tb.Frame):
         self.checked = {}       # vid -> ticked
         self.row_order = []     # iids in insertion order
         self.status_by_vid = {}  # vid -> display status
+        self._tag_by_vid = {}    # vid -> current status tag, for re-banding
         self.failed = {}        # vid -> failure reason
         self.unavailable = {}   # vid -> reason
         self._thumbs = {}       # vid -> PhotoImage (must be kept alive)
@@ -202,6 +214,22 @@ class PlaylistTable(tb.Frame):
         vsb.grid(row=1, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=vsb.set)
 
+        # The empty state sits on top of the tree rather than beside it, so it
+        # occupies the same rectangle the rows would have and the window never
+        # changes height between "no playlist" and "loaded". A Treeview cannot
+        # host child widgets, so this is a sibling in the same grid cell, and
+        # `lift` puts it above the tree whenever there is nothing to show.
+        self.empty = tb.Frame(self)
+        self.empty_title = tb.Label(self.empty, text=self.EMPTY_TITLE,
+                                    bootstyle=MUTED, font=fonts.section())
+        self.empty_title.pack()
+        self.empty_hint = tb.Label(self.empty, text=self.EMPTY_HINT,
+                                   bootstyle=MUTED, font=fonts.secondary(),
+                                   justify="center")
+        self.empty_hint.pack(pady=(tokens.SPACE_XS, 0))
+        self.empty.grid(row=1, column=0, sticky="nsew")
+        self._show_empty_state(True)
+
         self._apply_tags(tokens.palette(self._dark))
 
         self.tree.bind("<Button-3>", self._on_right_click)
@@ -231,6 +259,11 @@ class PlaylistTable(tb.Frame):
         self.tree.tag_configure("missing", foreground=palette.danger)
         self.tree.tag_configure("busy", foreground=palette.info)
         self.tree.tag_configure("muted", foreground=palette.on_surface_muted)
+        # Banding is a background, not a foreground, so it is a separate tag
+        # that coexists with the status tag on the same row. Tk applies tags in
+        # order and later foregrounds would win, so the band deliberately
+        # touches only `background`.
+        self.tree.tag_configure("band", background=palette.surface_subtle)
 
     def apply_style_colors(self, dark: bool):
         """Re-tint the status rows after a theme change."""
@@ -246,6 +279,7 @@ class PlaylistTable(tb.Frame):
         self.checked.clear()
         self.row_order.clear()
         self.status_by_vid.clear()
+        self._tag_by_vid.clear()
         self.failed.clear()
         self.unavailable.clear()
         self._thumbs.clear()
@@ -259,6 +293,24 @@ class PlaylistTable(tb.Frame):
             self._loader.request(e["id"])
         self.set_status_all("new", "Not downloaded")
         self._update_count()
+
+    def _row_tags(self, iid, status_tag):
+        """The status tag plus, on alternate rows, the banding tag.
+
+        Banding is what makes a dense list scannable: without it, a 56px row of
+        text and artwork reads as one undifferentiated block. It is applied by
+        position rather than at insert time because filtering reorders rows,
+        and a band that stayed with a row would look wrong the moment the list
+        changed underneath it.
+        """
+        try:
+            index = self.tree.index(iid)
+        except (tk.TclError, ValueError):
+            index = 0
+        tags = [status_tag] if status_tag else []
+        if index % 2:
+            tags.append("band")
+        return tuple(tags)
 
     def set_thumbnail(self, vid, img):
         iid = self.iid_by_id.get(vid)
@@ -287,8 +339,9 @@ class PlaylistTable(tb.Frame):
         word = text.split(" ", 1)[-1] if " " in text else text
         display = f"{tokens.STATUS_ICONS.get(tag, '·')} {word}"
         self.status_by_vid[vid] = display
+        self._tag_by_vid[vid] = tag
         self.tree.set(iid, "status", display)
-        self.tree.item(iid, tags=(tag,) if tag else ())
+        self.tree.item(iid, tags=self._row_tags(iid, tag))
 
     def mark_statuses(self, existing, only_if_clean=False):
         """Apply Downloaded/Missing across every row from a saved-title set."""
@@ -320,10 +373,11 @@ class PlaylistTable(tb.Frame):
         display = f"{tokens.STATUS_ICONS[tag]} {word}"
         for vid in self.checked:
             self.status_by_vid[vid] = display
+            self._tag_by_vid[vid] = tag
             iid = self.iid_by_id.get(vid)
             if iid:
                 self.tree.set(iid, "status", display)
-                self.tree.item(iid, tags=(tag,))
+                self.tree.item(iid, tags=self._row_tags(iid, tag))
 
     # ------------------------------------------------------------------ ticks
     def toggle_checked(self, vid):
@@ -349,11 +403,32 @@ class PlaylistTable(tb.Frame):
 
     def _update_count(self):
         total = len(self.checked)
+        self._show_empty_state(not self.tree.get_children(""))
         if not total:
             self.count_var.set("")
             return
         picked = len(self.checked_ids())
         self.count_var.set(f"{picked}/{total} selected")
+
+    def _show_empty_state(self, empty: bool):
+        """Show or hide the placeholder, with copy to match the reason.
+
+        "Nothing loaded" and "the search matched nothing" are different
+        problems with different fixes, so they get different text rather than
+        one generic message. The panel is only raised when it is relevant, so
+        it never steals clicks from the rows underneath.
+        """
+        if not empty:
+            self.empty.grid_remove()
+            return
+        filtered = bool((self.filter_var.get() or "").strip())
+        self.empty_title.configure(
+            text=self.FILTER_TITLE if filtered else self.EMPTY_TITLE)
+        self.empty_hint.configure(
+            text=self.FILTER_HINT if filtered else self.EMPTY_HINT)
+        self.empty.grid()
+        # Above the Treeview, which otherwise sits on top of it.
+        self.empty.lift()
 
     # ----------------------------------------------------------------- filter
     def apply_filter(self):
@@ -366,6 +441,16 @@ class PlaylistTable(tb.Frame):
         for index, iid in enumerate(visible):
             if iid not in children:
                 self.tree.move(iid, "", min(index, len(self.tree.get_children(""))))
+        # Banding is positional, so rows have to be re-tagged after every
+        # reorder - otherwise the stripes stay behind and the list looks
+        # arbitrary the moment a search runs.
+        for iid in visible:
+            vid = self.vid_by_iid.get(iid)
+            if vid is not None:
+                self.tree.item(iid, tags=self._row_tags(iid, self._tag_by_vid.get(vid)))
+        # A search that matches nothing is a different situation from an empty
+        # playlist, and the placeholder needs to say so.
+        self._show_empty_state(not self.tree.get_children(""))
 
     def _matches(self, iid, query) -> bool:
         title, artist = self.tree.item(iid, "values")[1:3]
