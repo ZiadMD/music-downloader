@@ -1,27 +1,67 @@
-# Byte-compiled / cache
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Packaging / build artifacts
-build/
-dist/
+*.so
+.Python
 *.egg-info/
 .eggs/
+.installed.cfg
+pip-wheel-metadata/
 
-# Logs
-build_out.txt
-*.log
-
-# Environments
+# Virtual environments (uv creates .venv/ by default)
 .venv/
 venv/
 env/
+ENV/
 
-# Local config / secrets
+# ---------------------------------------------------------------------------
+# Packaging / build artifacts
+# ---------------------------------------------------------------------------
+build/
+dist/
+*.egg
+MANIFEST
+
+# ---------------------------------------------------------------------------
+# Test / type-check caches
+# ---------------------------------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# ---------------------------------------------------------------------------
+# Logs and local scratch output
+# ---------------------------------------------------------------------------
+*.log
+build_out.txt
+
+# ---------------------------------------------------------------------------
+# Local, machine-specific state
+# ---------------------------------------------------------------------------
+# The app writes its settings to config.json and its signed-in session to
+# cookies.txt. Both are per-user: config.json holds an absolute output path
+# and cookies.txt holds real session tokens. Neither is tracked. Commit
+# config.example.json instead to document the available keys.
+config.json
 config.local.json
+cookies.txt
+*.har
 
-# Editor / OS
+# ---------------------------------------------------------------------------
+# Editors, OS, and CI
+# ---------------------------------------------------------------------------
 .vscode/
 .idea/
+*.swp
+*~
 .DS_Store
+Thumbs.db
+desktop.ini

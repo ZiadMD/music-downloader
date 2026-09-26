@@ -1,0 +1,60 @@
+[project]
+name = "music-downloader"
+version = "0.2.0"
+description = "A modern desktop GUI for downloading YouTube playlists as music or video."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "ZiadMD", email = "ziadmohamedgamal25@gmail.com" }
+]
+keywords = ["youtube", "playlist", "downloader", "yt-dlp", "gui", "music"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications",
+    "Environment :: MacOS X Cocoa",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = [
+    "yt-dlp>=2024.4.9",
+    "ttkbootstrap>=1.10.1",
+    "pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+# curl_cffi enables yt-dlp TLS impersonation, which reduces YouTube
+# bot-check failures. Optional: the app works fine without it.
+botworkaround = ["curl_cffi>=0.6"]
+dev = [
+    "pyinstaller>=6.0",
+    "pyright>=1.1.350",
+    "pytest>=8.0",
+]
+
+[project.urls]
+Repository = "https://github.com/ZiadMD/music-downloader"
+Issues = "https://github.com/ZiadMD/music-downloader/issues"
+
+[tool.uv]
+# `main.py` lives at the repo root and imports the `musicdl` package beside
+# it, so there is nothing to build or install as a distribution.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The project is not installed as a distribution, so the repo root (which
+# holds the `musicdl` package) must be importable during collection.
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.pyright]
+include = ["musicdl", "main.py", "tests"]
+exclude = ["**/__pycache__", "build", "dist"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingImports = "warning"
