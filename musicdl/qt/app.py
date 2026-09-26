@@ -265,6 +265,7 @@ class MainWindow(QMainWindow):
         outer.setSpacing(tokens.SPACE_SM)
 
         self.songs = SongList(dark=self._dark)
+        self.songs.status_activated.connect(self._on_row_action)
         # The list is the only section allowed to grow, so it gets the stretch
         # factor and everything else stays at its natural height.
         outer.addWidget(self._build_header(), 0)
@@ -706,6 +707,11 @@ class MainWindow(QMainWindow):
 
     def on_retry_pressed(self) -> None:
         self._begin("retry")
+
+    def _on_row_action(self, vid: str, action: str) -> None:
+        if action == "retry" and self.check_prereqs():
+            self.save_settings()
+            self._begin("retry", ids=[vid])
 
     def on_stop_pressed(self) -> None:
         """Ask the worker to stop after the current song.

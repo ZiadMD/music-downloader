@@ -5,7 +5,11 @@ import sys
 
 def main() -> int:
     """Launch the GUI. Returns a process exit code."""
-    from .ui.app import run
+    if "--tk" in sys.argv:
+        sys.argv.remove("--tk")
+        from .ui.app import run
+    else:
+        from .qt.app import run
 
     return run()
 

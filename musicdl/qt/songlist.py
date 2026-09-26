@@ -16,8 +16,8 @@ from __future__ import annotations
 from PySide6.QtCore import QModelIndex, QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QFontMetrics, QPainter
 from PySide6.QtWidgets import (
-    QAbstractItemView, QHeaderView, QLineEdit, QStyle, QStyledItemDelegate,
-    QTableView, QVBoxLayout, QWidget,
+    QAbstractItemView, QHeaderView, QHBoxLayout, QLabel, QLineEdit, QMenu,
+    QPushButton, QStyle, QStyledItemDelegate, QTableView, QVBoxLayout, QWidget,
 )
 
 from .. import status as status_mod
@@ -208,14 +208,30 @@ class SongList(QWidget):
         # The search box and the bulk toggles share one row above the table,
         # because both act on the list and neither is a separate section.
         bar = QWidget()
-        blay = QVBoxLayout(bar)
+        blay = QHBoxLayout(bar)
         blay.setContentsMargins(0, 0, 0, 0)
-        blay.setSpacing(tokens.SPACE_XS)
+        blay.setSpacing(tokens.SPACE_SM)
+
         self.filter_entry = QLineEdit()
         self.filter_entry.setPlaceholderText("Search songs")
         self.filter_entry.setClearButtonEnabled(True)
-        self.filter_entry.textChanged.connect(self.model.set_query)
-        blay.addWidget(self.filter_entry)
+        self.filter_entry.textChanged.connect(self._on_search_changed)
+        blay.addWidget(self.filter_entry, 1)
+
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("secondary")
+        blay.addWidget(self.count_label, 0)
+
+        tick_all_btn = QPushButton("Tick all")
+        tick_all_btn.setObjectName("ghost")
+        tick_all_btn.clicked.connect(lambda: self.set_all_checked(True))
+        blay.addWidget(tick_all_btn, 0)
+
+        untick_all_btn = QPushButton("Untick all")
+        untick_all_btn.setObjectName("ghost")
+        untick_all_btn.clicked.connect(lambda: self.set_all_checked(False))
+        blay.addWidget(untick_all_btn, 0)
+
         lay.addWidget(bar)
 
         self.view = QTableView()
@@ -231,8 +247,12 @@ class SongList(QWidget):
         self.view.verticalHeader().setDefaultSectionSize(tokens.ROW_HEIGHT)
         self.view.horizontalHeader().setHighlightSections(False)
         self.view.horizontalHeader().setSectionsClickable(False)
+        self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.view.customContextMenuRequested.connect(self._on_context_menu)
         self._configure_columns()
         self.view.clicked.connect(self._on_clicked)
+        self.model.dataChanged.connect(self._update_count)
+        self.model.modelReset.connect(self._update_count)
         lay.addWidget(self.view, 1)
 
     def _configure_columns(self) -> None:
@@ -273,6 +293,48 @@ class SongList(QWidget):
         self._dark = dark
         self._delegate.set_dark(dark)
         self.view.viewport().update()
+
+    def _on_search_changed(self, text: str) -> None:
+        self.model.set_query(text)
+        self._update_count()
+
+    def set_all_checked(self, on: bool) -> None:
+        self.model.set_all_checked(on)
+        self.checked_changed.emit()
+        self._update_count()
+
+    def _update_count(self) -> None:
+        total = len(self.model._songs)
+        if not total:
+            self.count_label.setText("")
+            return
+        picked = len(self.model.checked_ids())
+        self.count_label.setText(f"{picked}/{total} selected")
+
+    def _on_context_menu(self, pos) -> None:
+        index = self.view.indexAt(pos)
+        if not index.isValid():
+            return
+        song = self.model.song_at(index.row())
+        if song is None:
+            return
+        menu = QMenu(self)
+        retry_act = menu.addAction("Retry this song")
+        act = menu.exec(self.view.viewport().mapToGlobal(pos))
+        if act == retry_act:
+            self.status_activated.emit(song.vid, "retry")
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Space:
+            selection = self.view.selectionModel().selectedRows()
+            if selection:
+                for idx in selection:
+                    self.model.toggle(self._vid_at(idx))
+                self.checked_changed.emit()
+                self._update_count()
+                event.accept()
+                return
+        super().keyPressEvent(event)
 
     def focus_search(self) -> None:
         """Ctrl+F: focus the search box with its text selected.

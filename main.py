@@ -13,7 +13,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def main() -> int:
-    from musicdl.ui.app import run
+    if "--tk" in sys.argv:
+        sys.argv.remove("--tk")
+        from musicdl.ui.app import run
+    else:
+        from musicdl.qt.app import run
 
     return run()
 

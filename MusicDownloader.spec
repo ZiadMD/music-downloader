@@ -13,7 +13,7 @@ datas = [('icon.ico', '.')]
 binaries = []
 hiddenimports = ['PIL._tkinter_finder']
 
-for package in ('ttkbootstrap', 'yt_dlp', 'musicdl'):
+for package in ('ttkbootstrap', 'yt_dlp', 'musicdl', 'PySide6'):
     collected = collect_all(package)
     datas += collected[0]
     binaries += collected[1]
