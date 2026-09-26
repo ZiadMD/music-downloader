@@ -10,6 +10,7 @@ on its own.
 import pytest
 
 from musicdl import status as status_mod
+from musicdl.status import GLYPH_OVERRIDES
 from musicdl.qt.songmodel import (
     COL_PICK, COL_STATUS, COL_TITLE, Song, SongTableModel,
 )
@@ -81,12 +82,43 @@ class TestToolkitParity:
                 phrase), f"toolkits disagree about {phrase!r}"
 
     @pytest.mark.parametrize("phrase,role", [
-        ("Downloaded", "ok"), ("Failed", "missing"),
-        ("Downloading 42%", "busy"), ("Not downloaded", "muted"),
+        ("Downloaded", "ok"), ("Skipped", "ok"), ("Failed", "missing"),
+        ("Unavailable", "missing"), ("Downloading 42%", "busy"),
+        ("Not downloaded", "muted"),
     ])
     def test_glyph_comes_from_the_shared_token_table(self, phrase, role):
-        """The glyph is looked up by *role*, from the shared token table."""
-        assert status_mod.describe(phrase).glyph == tokens.STATUS_ICONS[role]
+        """The glyph comes from the shared token table, never a local copy."""
+        assert status_mod.describe(phrase).glyph in tokens.STATUS_ICONS.values()
+
+    def test_colour_role_may_be_shared_but_glyph_must_not(self):
+        """Skipped is coloured like Downloaded but must not *look* like it.
+
+        Both resolve to the ``ok`` role, because the colour should be the
+        same: neither is a problem. But the first render showed the identical
+        tick for both, and a user scanning the list could not tell a
+        deliberate skip from a completed download. The glyph is therefore
+        looked up by phrase, not by role.
+        """
+        skipped = status_mod.describe("Skipped")
+        done = status_mod.describe("Downloaded")
+        assert skipped.role == done.role == "ok"
+        assert skipped.glyph != done.glyph
+        assert skipped.glyph == tokens.STATUS_ICONS["skipped"]
+
+    @pytest.mark.parametrize("phrase,glyph_key", [
+        ("Downloaded", "ok"), ("Skipped", "skipped"), ("Failed", "failed"),
+        ("Unavailable", "unavailable"), ("Downloading 42%", "busy"),
+        ("Pending", "busy"), ("Not downloaded", "muted"),
+    ])
+    def test_every_phrase_gets_a_drawable_shape(self, phrase, glyph_key):
+        """Qt draws a shape per glyph key, so every key must be drawable."""
+        from musicdl.qt.statusglyph import GLYPH_SHAPES
+
+        key = GLYPH_OVERRIDES.get(
+            phrase.split(" ", 1)[0].lower().rstrip(".…"),
+            status_mod.role_for(phrase))
+        assert key == glyph_key
+        assert key in GLYPH_SHAPES
 
 
 @pytest.mark.usefixtures("qapp")
@@ -146,7 +178,11 @@ class TestSongModel:
         m = SongTableModel()
         m.set_songs(self.songs())
         m.set_status("v1", "Failed")
-        assert m.data(m.index(1, COL_STATUS)) == tokens.STATUS_ICONS["missing"]
+        cell = m.data(m.index(1, COL_STATUS))
+        assert cell in tokens.STATUS_ICONS.values()
+        # "Failed" gets its own glyph, distinct from the other "missing"
+        # role phrases, which is what the delegate draws.
+        assert cell == tokens.STATUS_ICONS["failed"]
 
     def test_status_tooltip_carries_the_full_phrase(self, qapp):
         from PySide6.QtCore import Qt

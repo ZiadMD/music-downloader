@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from .ui.tokens import STATUS_ICONS
 
-__all__ = ["describe", "StatusView", "role_for", "is_terminal_failure"]
+__all__ = ["describe", "StatusView", "role_for", "glyph_key", "is_terminal_failure"]
 
 # Maps a status word onto a semantic role. The keys are the phrases that
 # actually reach the UI; the roles are the four colour questions that matter.
@@ -41,6 +41,20 @@ ROLES = {
     # The neutral default: a row nobody has examined yet.
     "not": "muted",
     "new": "muted",
+}
+
+# Phrases that resolve to a colour role but still need their own glyph.
+#
+# The role drives the colour; the glyph is a separate question. "Downloaded"
+# and "Skipped" are both `ok` - the same good outcome - but they are not the
+# same event, and giving them the same glyph made a deliberately skipped song
+# indistinguishable from a downloaded one at a glance. The word in the
+# tooltip still carried the difference, but the column exists to be scanned,
+# not read. So roles may be shared while glyphs stay distinct.
+GLYPH_OVERRIDES = {
+    "skipped": "skipped",
+    "unavailable": "unavailable",
+    "failed": "failed",
 }
 
 
@@ -82,6 +96,24 @@ def role_for(phrase: str) -> str:
     return ROLES.get(first, "muted")
 
 
+def glyph_key(phrase: str) -> str:
+    """The token key a status phrase's glyph is looked up under.
+
+    This is the *key*, not the character: ``skipped``, ``ok``, ``busy`` and so
+    on. Callers that need to draw the glyph rather than set it as text - Qt,
+    which draws shapes because the UI font has none of the status characters -
+    need the key so they can map it to their own drawing. Tk needs the
+    character and gets it from :func:`describe`.
+
+    Exposed rather than kept private so the phrase parsing happens once. When
+    the delegate had its own copy, a test guarding the glyph lookup passed
+    against a model using the shared helper and a delegate that had silently
+    diverged from it - the guard was testing the copy.
+    """
+    first = (phrase or "").split(" ", 1)[0].lower().rstrip(".…")
+    return GLYPH_OVERRIDES.get(first, ROLES.get(first, "muted"))
+
+
 def describe(phrase: str) -> StatusView:
     """Resolve a raw status phrase into a glyph, a word and a colour role.
 
@@ -90,12 +122,16 @@ def describe(phrase: str) -> StatusView:
     identical string.
     """
     role = role_for(phrase)
+    # The glyph is looked up by the specific phrase where one exists, and
+    # falls back to the role's glyph. See GLYPH_OVERRIDES for why those
+    # differ from the role.
+    key = glyph_key(phrase)
     # Keep the live reading if there is one: "Downloading 42% · 1.4 MiB/s" is
     # more useful than "Downloading", and the column is sized for the worst
     # case so it never reflows.
     text = (phrase or "").strip() or "Not downloaded"
     word = text.split(" ", 1)[-1] if " " in text else text
-    return StatusView(role, STATUS_ICONS.get(role, STATUS_ICONS["muted"]),
+    return StatusView(role, STATUS_ICONS.get(key, STATUS_ICONS["muted"]),
                       word, text)
 
 
