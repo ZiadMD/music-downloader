@@ -22,7 +22,12 @@ def tk_root():
         root = tk.Tk()
     except tk.TclError:
         pytest.skip("no display available for Tk tests")
-    root.withdraw()
+    # The window is mapped rather than withdrawn, because Tk refuses to set
+    # keyboard focus on an unmapped toplevel - which would make every focus
+    # assertion below vacuously pass. It is moved off-screen instead of being
+    # hidden, so nothing flashes on a developer's desktop.
+    root.geometry("+2000+2000")
+    root.update()
     yield root
     # Deliberately not destroyed: leaving it alive keeps the font database
     # valid for any test that runs afterwards.

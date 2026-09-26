@@ -135,6 +135,7 @@ class PlaylistTable(tb.Frame):
         self.unavailable = {}   # vid -> reason
         self._thumbs = {}       # vid -> PhotoImage (must be kept alive)
         self._loader = ThumbnailLoader(emit)
+        self._anchor = None     # iid a shift-extend selection started from
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
@@ -151,8 +152,8 @@ class PlaylistTable(tb.Frame):
             row=0, column=0, sticky="w")
         self.filter_var = tb.StringVar(value="")
         self.filter_var.trace_add("write", lambda *_: self.apply_filter())
-        entry = tb.Entry(bar, textvariable=self.filter_var)
-        entry.grid(row=0, column=1, sticky="ew", padx=(6, 8))
+        self.filter_entry = tb.Entry(bar, textvariable=self.filter_var)
+        self.filter_entry.grid(row=0, column=1, sticky="ew", padx=(tokens.SPACE_SM, tokens.SPACE_MD))
 
         self.count_var = tb.StringVar(value="")
         tb.Label(bar, textvariable=self.count_var, bootstyle="secondary").grid(
@@ -192,6 +193,10 @@ class PlaylistTable(tb.Frame):
         self.tree.column("status", width=self.STATUS_COLUMN, anchor="center",
                          stretch=False, minwidth=self.STATUS_COLUMN)
         self.tree.grid(row=1, column=0, sticky="nsew")
+        # The list must be reachable by keyboard, which needs both an explicit
+        # takefocus and a real tab stop - a Treeview is neither by default.
+        # The value is a string, not an int: ttk only accepts a Tcl boolean.
+        self.tree.configure(takefocus="1")
 
         vsb = tb.Scrollbar(self, orient="vertical", command=self.tree.yview)
         vsb.grid(row=1, column=1, sticky="ns")
@@ -202,6 +207,18 @@ class PlaylistTable(tb.Frame):
         self.tree.bind("<Button-3>", self._on_right_click)
         self.tree.bind("<Button-1>", self._on_click)
         self.tree.bind("<space>", self._on_space)
+        self.tree.bind("<Shift-space>", self._on_shift_space)
+        self.tree.bind("<Control-a>", self.select_all)
+        self.tree.bind("<Control-A>", self.select_all)
+        self.tree.bind("<Command-a>", self.select_all)
+        # Find belongs on the tree, not just on the search box: Ctrl+F has to
+        # work from wherever focus happens to be, and the tree is where focus
+        # rests for most of the session.
+        self.tree.bind("<Control-f>", self.focus_filter)
+        self.tree.bind("<Command-f>", self.focus_filter)
+        # Escape belongs to the search box first, and only falls through to
+        # clearing the table selection when the box is already empty.
+        self.filter_entry.bind("<Escape>", self._on_filter_escape)
 
     def _apply_tags(self, palette: tokens.Palette):
         """Colour row tags from the token palette, never from literals.
@@ -356,18 +373,107 @@ class PlaylistTable(tb.Frame):
 
     # ------------------------------------------------------------------ input
     def _on_click(self, event):
+        iid = self.tree.identify_row(event.y)
+        # Shift-click extends the selection, matching every other list view.
+        if iid and (event.state & 0x0001):
+            self._extend_selection_to(iid)
+        elif iid:
+            self.tree.selection_set(iid)
         if self.tree.identify_column(event.x) == "#1":
-            vid = self.vid_by_iid.get(self.tree.identify_row(event.y))
+            vid = self.vid_by_iid.get(iid)
             if vid:
                 self.toggle_checked(vid)
                 return "break"
         return None
 
+    def _extend_selection_to(self, iid):
+        """Extend the selection from the anchor row down to ``iid``.
+
+        Tk's Treeview has no shift-click of its own, so the anchor is tracked
+        here. Anchoring on the first row of a shift-drag makes the gesture feel
+        natural: the range always starts where the selection began.
+        """
+        if not self._anchor:
+            self._anchor = iid
+        order = self.visible_order()
+        try:
+            start = order.index(self._anchor)
+            end = order.index(iid)
+        except ValueError:
+            # The anchor was filtered out of view; start a fresh range.
+            self._anchor = iid
+            self.tree.selection_set(iid)
+            return
+        lo, hi = sorted((start, end))
+        self.tree.selection_set(order[lo:hi + 1])
+
+    def visible_order(self):
+        """Row iids in display order, which differs from row_order when filtered."""
+        return list(self.tree.get_children(""))
+
     def _on_space(self, _event=None):
+        """Toggle the tick box on every selected row."""
         for iid in self.tree.selection():
             vid = self.vid_by_iid.get(iid)
             if vid:
                 self.toggle_checked(vid)
+        return "break"
+
+    def _on_shift_space(self, _event=None):
+        """Set every selected row to ticked, rather than flipping them.
+
+        Flipping a mixed selection is the least predictable behaviour, so the
+        modifier sets a known state instead.
+        """
+        selection = self.tree.selection()
+        if not selection:
+            return "break"
+        want = not all(self.checked.get(self.vid_by_iid.get(iid, ""), False)
+                       for iid in selection)
+        for iid in selection:
+            vid = self.vid_by_iid.get(iid)
+            if vid is None or self.checked.get(vid, True) == want:
+                continue
+            self.checked[vid] = want
+            self.tree.set(iid, "pick", self.TICK if want else "")
+        self._update_count()
+        return "break"
+
+    def focus_filter(self, _event=None):
+        """Move keyboard focus into the search box (Ctrl/Cmd+F).
+
+        Selects the existing text so typing replaces it, which is what the
+        user almost always wants from a find shortcut.
+        """
+        self.filter_entry.focus_set()
+        self.filter_entry.select_range(0, tk.END)
+        return "break"
+
+    def clear_filter(self, _event=None):
+        """Empty the search box and restore every row."""
+        if not self.filter_var.get():
+            return "break"
+        self.filter_var.set("")
+        return "break"
+
+    def _on_filter_escape(self, _event=None):
+        """Escape in the search box clears it, then returns focus to the list.
+
+        One Escape does the obvious thing; a second moves on rather than
+        making the user press it twice to get out of the box.
+        """
+        if self.filter_var.get():
+            self.filter_var.set("")
+            return "break"
+        self.tree.focus_set()
+        return "break"
+
+    def select_all(self, _event=None):
+        self.set_all_checked(True)
+        return "break"
+
+    def select_none(self, _event=None):
+        self.set_all_checked(False)
         return "break"
 
     def _on_right_click(self, event):

@@ -73,9 +73,38 @@ class App:
         # retint it, and tk.Text is not themed by ttkbootstrap.
         self.style = theme_mod.apply(root, self._cfg_is_dark())
         self.table.apply_style_colors(self._cfg_is_dark())
+        self._bind_shortcuts()
         self._refresh_cookie_status()
         self.root.after(POLL_MS, self._poll_queue)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _bind_shortcuts(self):
+        """Window-level keyboard shortcuts.
+
+        Bound on the root rather than per-widget so they work regardless of
+        which control has focus. The ones the table already handles for itself
+        (Space, Ctrl+A) are left to the table.
+        """
+        root = self.root
+        for key in ("<Control-f>", "<Command-f>"):
+            root.bind_all(key, self.table.focus_filter)
+        for key in ("<Control-l>", "<Command-l>"):
+            # Load the playlist without reaching for the mouse.
+            root.bind_all(key, lambda _e: self.load_playlist())
+        for key in ("<Control-d>", "<Command-d>"):
+            root.bind_all(key, lambda _e: self.download_all())
+        for key in ("<Control-t>", "<Command-t>"):
+            root.bind_all(key, self.toggle_theme)
+        root.bind_all("<F5>", lambda _e: self.check_status())
+        # Escape falls through to the filter box, which decides for itself
+        # whether to clear the text or hand focus back to the list.
+        root.bind_all("<Escape>", self._on_escape)
+
+    def _on_escape(self, _event=None):
+        focused = self.root.focus_get()
+        if focused is self.table.filter_entry:
+            return None  # the filter's own binding handles it
+        self.table.clear_filter()
 
     def _cfg_is_dark(self) -> bool:
         """Resolve the stored theme choice (which may be 'system') to dark."""
