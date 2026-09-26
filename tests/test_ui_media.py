@@ -28,12 +28,19 @@ def app(tk_root, monkeypatch):
     # Keep the developer's own settings out of the test.
     monkeypatch.setattr(app_mod.config, "load", lambda: app_mod.config._defaults())
     win = tk.Toplevel(tk_root)
-    win.geometry("+2000+2000")
+    win.geometry("1000x800")
+    try:
+        win.attributes("-alpha", 0.0)
+    except tk.TclError:
+        pass
     a = app_mod.App(win)
     win.update()
     yield a
-    a.table._loader.shutdown()
-    win.destroy()
+    a.close()
+    try:
+        win.destroy()
+    except tk.TclError:
+        pass
 
 
 def visible(widget):

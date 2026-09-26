@@ -73,8 +73,10 @@ downloads/
 # ---------------------------------------------------------------------------
 .vscode/
 .idea/
+.specstory/
 *.swp
 *~
 .DS_Store
 Thumbs.db
 desktop.ini
+

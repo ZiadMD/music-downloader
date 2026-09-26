@@ -26,6 +26,10 @@ import os
 import pytest
 
 
+def pytest_configure(config):
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
+
+
 @pytest.fixture(scope="session")
 def tk_root():
     """The one and only Tk root for the test session.
@@ -39,18 +43,11 @@ def tk_root():
         root = tk.Tk()
     except tk.TclError:
         pytest.skip("no display available for Tk tests")
-    # The window has to be mapped, because Tk refuses to set keyboard focus on
-    # an unmapped toplevel - which would make every focus assertion below pass
-    # without testing anything.
-    #
-    # It is also made fully transparent rather than moved off-screen. Under
-    # Wayland an off-screen window is outside the compositor's idea of the
-    # visible area and never receives keyboard focus, so `focus_set()` appears
-    # to do nothing and the focus assertions fail for a reason that has
-    # nothing to do with the code under test. Alpha 0 keeps the window mapped
-    # and focusable while making it invisible, which works on both X11 and
-    # Wayland and still never flashes on a developer's desktop.
-    root.attributes("-alpha", 0.0)
+    root.geometry("1000x800")
+    try:
+        root.attributes("-alpha", 0.0)
+    except tk.TclError:
+        pass
     root.update()
     yield root
     # Deliberately not destroyed: leaving it alive keeps the font database
@@ -75,5 +72,5 @@ def qapp():
 
     app = QApplication.instance()
     if app is None:
-        app = QApplication([])
+        app = QApplication(["-platform", "offscreen"])
     yield app

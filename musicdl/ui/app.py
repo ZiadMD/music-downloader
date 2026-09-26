@@ -85,7 +85,7 @@ class App:
         self.table.apply_style_colors(self._cfg_is_dark())
         self._bind_shortcuts()
         self._refresh_cookie_status()
-        self.root.after(POLL_MS, self._poll_queue)
+        self._poll_id = self.root.after(POLL_MS, self._poll_queue)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _bind_shortcuts(self):
@@ -642,12 +642,30 @@ class App:
 
     # ------------------------------------------------------------ queue pump
     def _poll_queue(self):
+        if self._closed:
+            return
         try:
             while True:
                 self._handle(self.msg_queue.get_nowait())
-        except queue.Empty:
+        except (queue.Empty, tk.TclError):
             pass
-        self.root.after(POLL_MS, self._poll_queue)
+        except Exception:
+            pass
+        if not self._closed:
+            try:
+                self._poll_id = self.root.after(POLL_MS, self._poll_queue)
+            except tk.TclError:
+                self._closed = True
+
+    def close(self):
+        self._closed = True
+        poll_id = getattr(self, "_poll_id", None)
+        if poll_id is not None:
+            try:
+                self.root.after_cancel(poll_id)
+            except tk.TclError:
+                pass
+        self.table._loader.shutdown()
 
     def _handle(self, msg):
         kind = msg[0]
@@ -751,15 +769,17 @@ class App:
     # ------------------------------------------------------------------ close
     def _on_close(self):
         if not self._closed:
-            self._closed = True
+            self.close()
             self.stop_requested = True
             core.abort_ffmpeg()
-            self.table._loader.shutdown()
             self._save_settings()
             target = self.dir_var.get().strip()
             if target and os.path.isdir(os.path.expanduser(target)):
                 cleanup_partials(os.path.expanduser(target))
-        self.root.destroy()
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
 
 
 def run() -> int:

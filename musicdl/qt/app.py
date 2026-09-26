@@ -22,8 +22,10 @@ settings that apply to it (:meth:`MainWindow.on_media_changed`).
 from __future__ import annotations
 
 import os
+import queue
+import time
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, QTimer, Qt
 from PySide6.QtGui import QAction, QFontMetrics
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QComboBox, QFileDialog, QGroupBox,
@@ -32,12 +34,19 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from .. import config, core, paths
+from .. import config, core, paths, status as status_mod
 from ..cleanup import cleanup_partials
 from ..cookies import validate_cookie_file
+from ..formatting import fmt_bytes, fmt_eta, fmt_speed, plural
+from ..naming import is_saved_match
+from ..ui import downloader as dl
 from ..ui import tokens
+from ..ui.fonts import progress_text, tick_text
 from . import theme
+from .dialogs import RenamePrompter
 from .songlist import SongList
+from .thumbs import ThumbnailLoader, to_pixmap
+from .songmodel import Song
 
 APP_TITLE = "Music Downloader"
 WINDOW_SIZE = QSize(1180, 820)
@@ -56,6 +65,15 @@ SINGLE_TOOLTIP = ("This link points at one video, so only that video will be "
 # Media types, in the order the radio buttons appear.
 MEDIA_MUSIC = "Music"
 MEDIA_VIDEO = "Video"
+
+# How often the main thread drains worker messages. Fast enough that progress
+# looks live, slow enough that the queue is not polled in a busy loop.
+POLL_MS = 120
+
+# Minimum gap between overall-progress detail text updates. yt-dlp reports far
+# more often than a person can read, and re-laying out the text on every
+# message is the work, not the reading.
+DETAIL_THROTTLE_SECONDS = 0.25
 
 # Section labels as small bold captions, used for the inline field labels that
 # sit next to a control rather than above it.
@@ -205,11 +223,36 @@ class MainWindow(QMainWindow):
         self.entries: list = []
         self._closed = False
 
+        # Job state. The three maps are shared *by reference* with the running
+        # job, so a failure classified on a worker thread is the same object
+        # the Retry button reads - the Tk version does the same, and copying
+        # them would mean the list and the job could disagree about what
+        # failed.
+        self.failed: dict = {}
+        self.unavailable: dict = {}
+        self._job = None
+        self._stop_requested = False
+        self._expected_n = 0
+        self._song_i = 0
+        self._last_detail = 0.0
+
+        self._queue: queue.Queue = queue.Queue()
+        self._prompter = RenamePrompter(self._enqueue)
+        self._thumbs = ThumbnailLoader(self._enqueue)
+
         self._build_ui()
         self.on_media_changed()
         self.on_url_changed()
         self._refresh_cookie_status()
         self._bind_shortcuts()
+
+        # The pump runs on the main thread and is what makes the worker's
+        # messages safe to handle. It is started last, so the first tick cannot
+        # arrive before the window is finished being built.
+        self._pump_timer = QTimer(self)
+        self._pump_timer.setInterval(POLL_MS)
+        self._pump_timer.timeout.connect(self._on_pump)
+        self._pump_timer.start()
 
     # ------------------------------------------------------------------ build
     def _build_ui(self) -> None:
@@ -624,6 +667,8 @@ class MainWindow(QMainWindow):
         self.jobs_combo.setEnabled(not busy and self.parallel_check.isChecked())
         self.stop_btn.setEnabled(busy)
 
+    _set_busy = set_busy
+
     def set_has_failures(self, has_failures: bool) -> None:
         self.retry_btn.setEnabled(has_failures and self.download_btn.isEnabled())
 
@@ -663,22 +708,227 @@ class MainWindow(QMainWindow):
         self._begin("retry")
 
     def on_stop_pressed(self) -> None:
-        self.set_status("Stopping...")
+        """Ask the worker to stop after the current song.
 
-    def _begin(self, action: str) -> None:
-        """Validate and remember settings, then report the intent.
-
-        The job itself is started by the downloader wiring, which is a
-        separate change. Everything up to that point - the checks, the
-        snapshot, the persisted settings - is real and is what the buttons
-        need in order to be worth testing at all.
+        Stopping mid-file is not offered: yt-dlp has already written a partial
+        file by the time the user reaches for the button, and killing the
+        process there would leave a file that looks complete and is not. The
+        ffmpeg process is aborted directly instead, which is the one part that
+        is safe to interrupt because it has not written the final file yet.
         """
+        self._stop_requested = True
+        core.abort_ffmpeg()
+        self.append_log(">>> Stop requested. Aborting current song...")
+
+    def _begin(self, action: str, ids=None, url=None) -> None:
+        """Validate, snapshot, and start a job.
+
+        A second job is refused rather than queued. Two jobs writing into one
+        output folder would fight over filenames, and the failure would show up
+        as a confusing "file already exists" on the second one rather than as
+        the conflict it is.
+        """
+        if self._job is not None:
+            self.append_log(">>> Still busy - wait for the current job to finish.")
+            return
         if not self.check_prereqs():
             return
         self.save_settings()
-        selected = len(self.songs.model.checked_ids())
-        self.append_log(f">>> {action}: {selected} of "
-                        f"{len(self.songs.model.checked_ids())} selected.")
+        self._stop_requested = False
+        self._set_busy(True)
+        self._job = dl.DownloadJob(
+            action=action,
+            snapshot=self.snapshot(),
+            enqueue=self._enqueue,
+            ask_rename=self._prompter.ask,
+            stop_requested=lambda: self._stop_requested,
+            url=url,
+            ids=ids,
+        )
+        # Shared with the job so its failure and unavailable maps stay in step
+        # with what the list is showing, the way the Tk version shared them.
+        self._job.entries = self.entries
+        self._job.failed = self.failed
+        self._job.unavailable = self.unavailable
+        self._job.start()
+
+    def _enqueue(self, msg) -> None:
+        """Called from a worker thread. Just puts the message on the queue.
+
+        Nothing is touched here. A worker thread must not call a Qt method -
+        the widgets are owned by the main thread, and touching them from
+        anywhere else is undefined behaviour rather than a slow path. The
+        timer in :meth:`_pump` is what moves the message onto the main thread.
+        """
+        self._queue.put(msg)
+
+    def _on_pump(self) -> None:
+        """Drain the queue without waiting, then come back.
+
+        A ``QTimer`` rather than ``QApplication.processEvents``: processEvents
+        re-enters the event loop from wherever it is called, so a dialog
+        opening from inside a handler can get processed by a *second* nested
+        loop, and the same slot then runs twice for one message. A timer
+        cannot re-enter like that.
+        """
+        while True:
+            try:
+                msg = self._queue.get_nowait()
+            except queue.Empty:
+                break
+            handler = self._HANDLERS.get(msg[0])
+            if handler is not None:
+                handler(self, *msg[1:])
+        self._pump_timer.start()
+
+    # --------------------------------------------------------------- handlers
+    def _h_log(self, text) -> None:
+        self.append_log(text)
+
+    def _h_status(self, text) -> None:
+        self.set_status(text)
+
+    def _h_progress(self, status, downloaded, total, _fname, speed, eta) -> None:
+        if not total:
+            return
+        n = self._expected_n or 1
+        frac = downloaded / total
+        # Overall progress is a fraction of the playlist, not of this song:
+        # showing one song's bar as the whole run makes a 3-song queue look
+        # like it has just started when it is nearly done.
+        self.progress.setValue(min(((self._song_i - 1) + frac) / n * 100, 100.0))
+        now = time.monotonic()
+        if now - self._last_detail < DETAIL_THROTTLE_SECONDS:
+            return
+        self._last_detail = now
+        self.set_detail(
+            f"Song {self._song_i}/{n} · "
+            f"{progress_text(int(frac * 100), fmt_speed(speed), fmt_eta(eta))} · "
+            f"{fmt_bytes(downloaded)} of {fmt_bytes(total)}")
+
+    def _h_song_index(self, i, _total) -> None:
+        self._song_i = i
+
+    def _h_tick(self, done, active, total) -> None:
+        self.progress.setRange(0, max(total, 1))
+        self.progress.setValue(done)
+        self.set_detail(tick_text(done, active, total))
+
+    def _h_row_status(self, vid, text) -> None:
+        self.songs.model.set_status(vid, text)
+
+    def _h_row_progress(self, vid, downloaded, total, speed) -> None:
+        if not total:
+            return
+        self.songs.model.set_status(
+            vid,
+            f"Downloading {progress_text(int(downloaded / total * 100), fmt_speed(speed))}")
+
+    def _h_set_expected(self, n) -> None:
+        self._expected_n = n or 1
+        self.progress.setRange(0, self._expected_n)
+        self.progress.setValue(0)
+
+    def _h_reset_progress(self) -> None:
+        self.progress.setValue(0)
+        self.set_detail("")
+
+    def _h_ask_rename(self, entry) -> None:
+        self._prompter.show(self, entry)
+
+    def _h_setup_tree(self, entries) -> None:
+        self.entries = entries
+        self._populate(entries)
+        self.subtitle_label.setText(f"{plural(len(entries), 'song')} loaded")
+
+    def _h_mark_statuses(self, existing) -> None:
+        self._mark_statuses(existing)
+
+    def _h_refresh_statuses(self, existing) -> None:
+        self._mark_statuses(existing, only_if_clean=True)
+
+    def _h_row_thumb(self, vid, img) -> None:
+        self._set_thumbnail(vid, img)
+
+    def _h_finished(self, text, summary) -> None:
+        self._job = None
+        self._stop_requested = False
+        self._set_busy(False)
+        self.set_status(text)
+        self.set_detail("")
+        # Retry is only offered when there is something to retry, and the
+        # answer comes from the job's own classification rather than from
+        # re-reading the list - the list's status column is a display concern.
+        self.set_has_failures(bool(self.failed))
+        if summary:
+            QMessageBox.information(self, "Finished", summary)
+
+    _HANDLERS = {
+        dl.LOG: _h_log,
+        dl.STATUS: _h_status,
+        dl.PROGRESS: _h_progress,
+        dl.SONG_INDEX: _h_song_index,
+        dl.TICK: _h_tick,
+        dl.ROW_STATUS: _h_row_status,
+        dl.ROW_PROGRESS: _h_row_progress,
+        dl.SET_EXPECTED: _h_set_expected,
+        dl.RESET_PROGRESS: _h_reset_progress,
+        dl.ASK_RENAME: _h_ask_rename,
+        dl.SETUP_TREE: _h_setup_tree,
+        dl.MARK_STATUSES: _h_mark_statuses,
+        dl.REFRESH_STATUSES: _h_refresh_statuses,
+        dl.ROW_THUMB: _h_row_thumb,
+        dl.FINISHED: _h_finished,
+    }
+
+    # -------------------------------------------------------------- the list
+    def _populate(self, entries) -> None:
+        """Replace the list with ``entries`` and tick everything.
+
+        Mirrors ``PlaylistTable.populate``: a fresh load is a fresh list, so
+        the previous statuses and failures are dropped rather than carried
+        over onto songs that may not be the same ones.
+        """
+        self.failed.clear()
+        self.unavailable.clear()
+        self.songs.model.set_songs(
+            Song(e["id"], e["title"], e["uploader"]) for e in entries)
+        self.songs.model.set_status_all("Not downloaded")
+        for e in entries:
+            self._thumbs.request(e["id"])
+        self.set_has_failures(False)
+
+    def _mark_statuses(self, existing, only_if_clean=False) -> None:
+        """Apply Downloaded/Missing across every row from a saved-title set.
+
+        ``only_if_clean`` is what makes a manual Check Saved different from
+        the check a download run does for itself: a row that has already
+        failed, or was deliberately skipped, keeps what it is saying, because
+        the user has been told something more specific than "it's missing".
+        """
+        model = self.songs.model
+        for entry in self.entries:
+            vid = entry["id"]
+            if only_if_clean and (vid in self.failed
+                                  or vid in self.unavailable
+                                  or status_mod.role_for(
+                                      model.song_of(vid).status) != "muted"
+                                  and model.song_of(vid).status != "Not downloaded"):
+                continue
+            if is_saved_match(existing, entry["title"]):
+                model.set_status(vid, "Downloaded")
+            else:
+                model.set_status(vid, "Missing")
+
+    def _set_thumbnail(self, vid, img) -> None:
+        """Show fetched artwork, or do nothing.
+
+        A failed fetch sends ``None`` rather than an exception, so a row with
+        no artwork simply stays as it is instead of showing a broken image.
+        """
+        if img is None:
+            return
+        self.songs.model.set_thumbnail(vid, to_pixmap(img))
 
     # --------------------------------------------------------------- settings
     def save_settings(self) -> None:

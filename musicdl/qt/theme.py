@@ -193,6 +193,20 @@ QPushButton#ghost {{
 }}
 QPushButton#ghost:hover {{ background-color: {hover}; }}
 
+/* The one destructive action on screen. A filled danger button would compete
+   with the primary action for the eye, so this is a tinted border instead:
+   it reads as "this one ends things" without becoming a second focal point.
+   Used only for "Cancel rest" in the rename dialog. */
+QPushButton#destructive {{
+    background-color: transparent;
+    border: 1px solid {p.danger};
+    color: {p.danger};
+}}
+QPushButton#destructive:hover {{
+    background-color: {p.danger};
+    color: {p.on_danger};
+}}
+
 QRadioButton, QCheckBox {{ spacing: {_px(tokens.SPACE_SM)}; }}
 QCheckBox::indicator, QRadioButton::indicator {{
     width: {_px(tokens.FONT_SIZE_BODY)};
