@@ -14,16 +14,31 @@ import ttkbootstrap as tb
 from PIL import Image, ImageDraw, ImageTk
 
 from ..naming import is_saved_match
+from . import tokens
 
-# Thumbnail geometry. 16:9 at 96x54 suits the 66px row height with padding.
-THUMB_SIZE = (96, 54)
-THUMB_RADIUS = 8
+# Thumbnail geometry. 16:9 at 80x45 suits the 56px row height with padding.
+THUMB_SIZE = tokens.THUMB_SIZE
+THUMB_RADIUS = tokens.THUMB_RADIUS
 THUMB_WORKERS = 4
 THUMB_URL = "https://i.ytimg.com/vi/{vid}/mqdefault.jpg"
 _USER_AGENT = "Mozilla/5.0"
 
-# A coloured dot prefixes each status so rows are scannable at a glance.
-STATUS_DOT = "● "
+# Maps a status word onto a tag used to colour the row, and onto the glyph
+# shown beside it. Colour is never the only signal: every state carries both a
+# glyph and a readable word, so the list works without colour vision.
+STATUS_TAGS = {
+    "ok": "ok",
+    "downloaded": "ok",
+    "skipped": "ok",
+    "missing": "missing",
+    "failed": "missing",
+    "unavailable": "missing",
+    "downloading": "busy",
+    "waiting": "busy",
+    "pending": "busy",
+    # The neutral default: a row nobody has examined yet.
+    "not": "muted",
+}
 
 
 class ThumbnailLoader:
@@ -99,9 +114,10 @@ class PlaylistTable(tb.Frame):
     # height sane on tall playlists; the table still grows with the window.
     VISIBLE_ROWS = 8
 
-    def __init__(self, master, emit):
+    def __init__(self, master, emit, dark=True):
         super().__init__(master, padding=(2, 2))
         self._emit = emit
+        self._dark = dark
 
         self.entries = []
         self.iid_by_id = {}     # vid -> iid
@@ -171,17 +187,28 @@ class PlaylistTable(tb.Frame):
         self.tree.tag_configure("missing", foreground="#dc3545")
         self.tree.tag_configure("busy", foreground="#4dabf7")
         self.tree.tag_configure("muted", foreground="#868e96")
+        self._apply_tags(tokens.palette(self._dark))
 
         self.tree.bind("<Button-3>", self._on_right_click)
         self.tree.bind("<Button-1>", self._on_click)
         self.tree.bind("<space>", self._on_space)
 
-    def apply_style_colors(self, colors):
+    def _apply_tags(self, palette: tokens.Palette):
+        """Colour row tags from the token palette, never from literals.
+
+        Each tag is a *semantic* role rather than a raw colour, so the light and
+        dark palettes can pick different values for the same meaning while
+        both clearing WCAG AA against their own surface.
+        """
+        self.tree.tag_configure("ok", foreground=palette.success)
+        self.tree.tag_configure("missing", foreground=palette.danger)
+        self.tree.tag_configure("busy", foreground=palette.info)
+        self.tree.tag_configure("muted", foreground=palette.on_surface_muted)
+
+    def apply_style_colors(self, dark: bool):
         """Re-tint the status rows after a theme change."""
-        self.tree.tag_configure("ok", foreground=getattr(colors, "success", "#2eb85c"))
-        self.tree.tag_configure("missing", foreground=getattr(colors, "danger", "#dc3545"))
-        self.tree.tag_configure("busy", foreground=getattr(colors, "info", "#4dabf7"))
-        self.tree.tag_configure("muted", foreground=getattr(colors, "secondary", "#868e96"))
+        self._dark = dark
+        self._apply_tags(tokens.palette(dark))
 
     # ------------------------------------------------------------------- data
     def populate(self, entries):
@@ -198,11 +225,12 @@ class PlaylistTable(tb.Frame):
         for e in entries:
             self.checked[e["id"]] = True
             iid = self.tree.insert(
-                "", "end", image="", values=(self.TICK, e["title"], e["uploader"], "New"))
+                "", "end", image="", values=(self.TICK, e["title"], e["uploader"], ""))
             self.iid_by_id[e["id"]] = iid
             self.vid_by_iid[iid] = e["id"]
             self.row_order.append(iid)
             self._loader.request(e["id"])
+        self.set_status_all("new", "Not downloaded")
         self._update_count()
 
     def set_thumbnail(self, vid, img):
@@ -218,13 +246,21 @@ class PlaylistTable(tb.Frame):
 
     # ----------------------------------------------------------------- status
     def set_status(self, vid, text, keep=None):
+        """Show a status on a row as glyph + word, tinted by its tag.
+
+        The glyph is what makes the state readable without colour vision, and
+        the word is what makes it unambiguous. Neither is decoration. Callers
+        pass the raw status ("Downloading 42% · 1.4 MiB/s"); the glyph is
+        stripped and re-applied here so it is never doubled up.
+        """
         iid = self.iid_by_id.get(vid)
         if not iid:
             return
-        display = text if text.startswith(STATUS_DOT) else STATUS_DOT + text
+        tag = keep or self._status_tag(text)
+        word = text.split(" ", 1)[-1] if " " in text else text
+        display = f"{tokens.STATUS_ICONS.get(tag, '·')} {word}"
         self.status_by_vid[vid] = display
         self.tree.set(iid, "status", display)
-        tag = keep or self._status_tag(text)
         self.tree.item(iid, tags=(tag,) if tag else ())
 
     def mark_statuses(self, existing, only_if_clean=False):
@@ -241,14 +277,26 @@ class PlaylistTable(tb.Frame):
 
     @staticmethod
     def _status_tag(text):
-        low = text.lower()
-        if any(k in low for k in ("unavailable", "missing", "failed")):
-            return "missing"
-        if "downloaded" in low or "skipped" in low:
-            return "ok"
-        if "downloading" in low or "waiting" in low or "pending" in low:
-            return "busy"
-        return "muted"
+        """Resolve a status phrase to its tag, which carries colour and glyph.
+
+        Status phrases arrive in three shapes: a bare word ("Failed"), a word
+        with an ellipsis ("Waiting..."), and a word with a live reading
+        ("Downloading 42% · 1.4 MiB/s"). Matching on the first whitespace-
+        delimited token handles all three, but the trailing punctuation has to
+        come off first or "Downloading..." never matches its own key.
+        """
+        first = text.split(" ", 1)[0].lower().rstrip(".…")
+        return STATUS_TAGS.get(first, "muted")
+
+    def set_status_all(self, tag, word):
+        """Give every row the same status, used for the initial 'new' state."""
+        display = f"{tokens.STATUS_ICONS[tag]} {word}"
+        for vid in self.checked:
+            self.status_by_vid[vid] = display
+            iid = self.iid_by_id.get(vid)
+            if iid:
+                self.tree.set(iid, "status", display)
+                self.tree.item(iid, tags=(tag,))
 
     # ------------------------------------------------------------------ ticks
     def toggle_checked(self, vid):

@@ -239,9 +239,22 @@ class TestStatusIcons:
         assert tokens.STATUS_ICONS[state].strip()
 
     def test_glyphs_are_distinct(self):
-        """Two states sharing a glyph would be ambiguous without colour."""
-        glyphs = [g.strip() for g in tokens.STATUS_ICONS.values()]
+        """Two states sharing a glyph would be ambiguous without colour.
+
+        Intentional aliases are declared in STATUS_ICON_ALIASES, so a
+        duplicated shape has to be an explicit decision.
+        """
+        aliased = {k for k in tokens.STATUS_ICON_ALIASES
+                   if tokens.STATUS_ICON_ALIASES[k] in tokens.STATUS_ICONS}
+        glyphs = [g.strip() for k, g in tokens.STATUS_ICONS.items()
+                  if k not in aliased]
         assert len(set(glyphs)) == len(glyphs)
+
+    def test_aliases_point_at_a_real_state(self):
+        for alias, target in tokens.STATUS_ICON_ALIASES.items():
+            assert alias in tokens.STATUS_ICONS
+            assert target in tokens.STATUS_ICONS
+            assert tokens.STATUS_ICONS[alias] == tokens.STATUS_ICONS[target]
 
     def test_glyphs_are_single_width(self):
         """Wide glyphs would break column alignment."""

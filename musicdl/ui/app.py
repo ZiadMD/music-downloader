@@ -71,7 +71,7 @@ class App:
         # Applied after the widgets exist: theme_mod needs the log widget to
         # retint it, and tk.Text is not themed by ttkbootstrap.
         self.style = theme_mod.apply(root, self._cfg_is_dark())
-        self.table.apply_style_colors(self.style.colors)
+        self.table.apply_style_colors(self._cfg_is_dark())
         self._refresh_cookie_status()
         self.root.after(POLL_MS, self._poll_queue)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -98,7 +98,7 @@ class App:
         self._build_url_row(frame, pad)
         self._build_options_row(frame, pad)
         self._build_output_row(frame, pad)
-        self.table = PlaylistTable(frame, self._enqueue)
+        self.table = PlaylistTable(frame, self._enqueue, dark=self._cfg_is_dark())
         self.table.grid(row=ROW_TABLE, column=0, sticky="nsew", **pad)
         self._build_actions_row(frame, pad)
         self._build_footer(frame, pad)
@@ -279,7 +279,7 @@ class App:
     def toggle_theme(self):
         self.cfg["theme"] = "light" if self._cfg_is_dark() else "dark"
         self.style = theme_mod.apply(self.root, self._cfg_is_dark())
-        self.table.apply_style_colors(self.style.colors)
+        self.table.apply_style_colors(self._cfg_is_dark())
         self._update_theme_btn()
         self._bar_style("")
         self._save_settings()

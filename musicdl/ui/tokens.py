@@ -246,8 +246,15 @@ STATUS_ICONS = {
     "failed": "✕",       # cross
     "unavailable": "⊘",  # circled slash - permanently gone
     "skipped": "→",      # arrow - deliberately passed over
-    "new": "·",          # middot - not yet examined
+    "muted": "·",        # middot - the neutral default
+    # `new` is an alias of `muted`: an unexamined row is the neutral state, so
+    # giving it a separate glyph would imply a distinction that is not drawn.
+    "new": "·",
 }
+
+# Glyphs that intentionally share a shape, so the distinctness check below
+# knows the difference is intentional rather than a copy-paste mistake.
+STATUS_ICON_ALIASES = {"new": "muted"}
 
 
 def palette(dark: bool) -> Palette:
